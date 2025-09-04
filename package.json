@@ -7,7 +7,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:netlify": "rm -rf .next && npm ci && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
