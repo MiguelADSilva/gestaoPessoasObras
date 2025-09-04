@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-// Componente Login
 export default function Login() {
   const [formData, setFormData] = useState({
     email: '',
@@ -12,9 +11,10 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter(); // Use o router do Next.js
+  const [success, setSuccess] = useState('');
+  const router = useRouter();
 
-  // Credenciais de teste
+  // Credenciais de teste para demonstração
   const testCredentials = [
     { email: 'admin@obras.pt', password: 'admin123' },
     { email: 'gestor@obras.pt', password: 'gestor123' },
@@ -22,93 +22,142 @@ export default function Login() {
     { email: 'demo@demo.pt', password: 'demo123' },
   ];
 
+  // Limpar mensagens após 5 segundos
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError('');
+        setSuccess('');
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prevState => ({
       ...prevState,
       [name]: value
     }));
+    // Limpar mensagens quando o usuário começar a digitar
     if (error) setError('');
+    if (success) setSuccess('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setSuccess('');
     
-    // Simulação de processo de login
-    setTimeout(() => {
-      // Verificar se é uma credencial de teste
-      const isValidTest = testCredentials.some(
-        cred => cred.email === formData.email && cred.password === formData.password
-      );
-      
-      if (isValidTest || formData.password === 'teste') {
-        console.log('Login bem-sucedido com:', formData.email);
-        setIsLoading(false);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Login bem-sucedido
+        setSuccess('Login bem-sucedido! Redirecionando...');
         
-        // Redirecionar para a homepage após login bem-sucedido
-        // USANDO NEXT.JS ROUTING:
-        router.push('/homepage');
+        // Guardar token e dados do usuário
+        if (rememberMe) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        } else {
+          sessionStorage.setItem('token', data.token);
+          sessionStorage.setItem('user', JSON.stringify(data.user));
+        }
+
+        // Redirecionar após breve delay para mostrar mensagem
+        setTimeout(() => {
+          router.push('/homepage');
+        }, 1500);
+        
       } else {
-        setIsLoading(false);
-        setError('Credenciais inválidas. Use uma das credenciais de teste.');
+        setError(data.error || 'Erro no login. Verifique suas credenciais.');
       }
-    }, 1000);
+    } catch (error) {
+      setError('Erro de conexão com o servidor. Tente novamente.');
+      console.error('Erro no login:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Preencher automaticamente com credenciais de teste
   const fillTestCredentials = (email, password) => {
     setFormData({
       email: email,
       password: password
     });
+    setError('');
+    setSuccess('Credenciais preenchidas! Clique em Entrar.');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-orange-50 py-4 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
-        <div className="bg-orange-500 py-6 px-4 sm:px-6">
+        <div className="bg-orange-500 py-4 sm:py-6 px-4 sm:px-6">
           <div className="flex items-center justify-center">
-            <div className="bg-white p-3 rounded-full">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="bg-white p-2 sm:p-3 rounded-full">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
           </div>
-          <h2 className="mt-4 text-center text-2xl font-bold text-white">
+          <h2 className="mt-3 sm:mt-4 text-center text-xl sm:text-2xl font-bold text-white">
             Gestão de Pessoal de Obras
           </h2>
-          <p className="mt-2 text-center text-sm text-orange-100">
+          <p className="mt-1 sm:mt-2 text-center text-xs sm:text-sm text-orange-100">
             Acesso restrito à equipe autorizada
           </p>
         </div>
         
-        <div className="py-8 px-6 sm:px-8">
+        <div className="py-6 sm:py-8 px-4 sm:px-6">
           {/* Credenciais de teste para facilitar */}
-          <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <h3 className="text-sm font-medium text-blue-800 mb-2">Credenciais de Teste:</h3>
-            <div className="space-y-2">
+          <div className="mb-4 sm:mb-6 bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
+            <h3 className="text-xs sm:text-sm font-medium text-blue-800 mb-2">Credenciais de Teste:</h3>
+            <div className="space-y-1 sm:space-y-2">
               {testCredentials.map((cred, index) => (
                 <button
                   key={index}
                   type="button"
                   onClick={() => fillTestCredentials(cred.email, cred.password)}
-                  className="text-xs text-blue-600 hover:text-blue-800 underline block w-full text-left"
+                  className="text-xs text-blue-600 hover:text-blue-800 underline block w-full text-left transition duration-200"
                 >
                   {cred.email} / {cred.password}
                 </button>
               ))}
-              <p className="text-xs text-blue-600 mt-2">
+              <p className="text-xs text-blue-600 mt-1 sm:mt-2">
                 Ou use qualquer email com password "teste"
               </p>
             </div>
           </div>
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-4 sm:space-y-6" onSubmit={handleSubmit}>
+            {/* Mensagens de Sucesso */}
+            {success && (
+              <div className="bg-green-50 text-green-700 p-3 rounded-md text-sm animate-fade-in">
+                <div className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i>
+                  {success}
+                </div>
+              </div>
+            )}
+
+            {/* Mensagens de Erro */}
             {error && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">
-                {error}
+              <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm animate-fade-in">
+                <div className="flex items-center">
+                  <i className="fas fa-exclamation-circle mr-2"></i>
+                  {error}
+                </div>
               </div>
             )}
             
@@ -118,7 +167,7 @@ export default function Login() {
               </label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <i className="fas fa-envelope text-gray-400"></i>
+                  <i className="fas fa-envelope text-gray-400 text-sm"></i>
                 </div>
                 <input
                   id="email"
@@ -126,10 +175,11 @@ export default function Login() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition duration-300 text-gray-900 placeholder-gray-400"
+                  className="block w-full pl-10 pr-3 py-2 sm:py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition duration-300 text-gray-900 placeholder-gray-400 text-sm sm:text-base"
                   placeholder="seu@email.com"
                   value={formData.email}
                   onChange={handleChange}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -140,7 +190,7 @@ export default function Login() {
               </label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <i className="fas fa-lock text-gray-400"></i>
+                  <i className="fas fa-lock text-gray-400 text-sm"></i>
                 </div>
                 <input
                   id="password"
@@ -148,10 +198,11 @@ export default function Login() {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition duration-300 text-gray-900 placeholder-gray-400"
+                  className="block w-full pl-10 pr-3 py-2 sm:py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition duration-300 text-gray-900 placeholder-gray-400 text-sm sm:text-base"
                   placeholder="Sua password"
                   value={formData.password}
                   onChange={handleChange}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -165,16 +216,21 @@ export default function Login() {
                   className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
                   checked={rememberMe}
                   onChange={() => setRememberMe(!rememberMe)}
+                  disabled={isLoading}
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="remember-me" className="ml-2 block text-xs sm:text-sm text-gray-700">
                   Lembrar-me
                 </label>
               </div>
 
-              <div className="text-sm">
-                <a href="#" className="font-medium text-orange-600 hover:text-orange-500 transition duration-300">
+              <div className="text-xs sm:text-sm">
+                <button
+                  type="button"
+                  className="font-medium text-orange-600 hover:text-orange-500 transition duration-300"
+                  onClick={() => setError('Funcionalidade em desenvolvimento')}
+                >
                   Esqueceu a password?
-                </a>
+                </button>
               </div>
             </div>
 
@@ -182,59 +238,77 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition duration-300 ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
+                className={`group relative w-full flex justify-center py-2 sm:py-3 px-4 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition duration-300 ${
+                  isLoading ? 'opacity-75 cursor-not-allowed' : 'transform hover:scale-105'
+                }`}
               >
                 {isLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 sm:h-5 sm:w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     A processar...
                   </>
-                ) : 'Entrar'}
+                ) : (
+                  <>
+                    <i className="fas fa-sign-in-alt mr-2"></i>
+                    Entrar
+                  </>
+                )}
               </button>
             </div>
           </form>
 
-          <div className="mt-6">
+          <div className="mt-4 sm:mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              <div className="relative flex justify-center text-xs sm:text-sm">
                 <span className="px-2 bg-white text-gray-500">
                   Acesso seguro
                 </span>
               </div>
             </div>
             
-            <div className="mt-4 flex justify-center space-x-4">
+            <div className="mt-3 sm:mt-4 grid grid-cols-2 gap-2 sm:gap-4">
               <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-50">
-                  <i className="fas fa-shield-alt text-blue-500 text-xl"></i>
+                <div className="mx-auto flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-50">
+                  <i className="fas fa-shield-alt text-blue-500 text-sm sm:text-base"></i>
                 </div>
-                <p className="mt-2 text-xs text-gray-500">Autenticação segura</p>
+                <p className="mt-1 text-xs text-gray-500">Autenticação segura</p>
               </div>
               <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-50">
-                  <i className="fas fa-user-lock text-green-500 text-xl"></i>
+                <div className="mx-auto flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-green-50">
+                  <i className="fas fa-user-lock text-green-500 text-sm sm:text-base"></i>
                 </div>
-                <p className="mt-2 text-xs text-gray-500">Dados protegidos</p>
+                <p className="mt-1 text-xs text-gray-500">Dados protegidos</p>
               </div>
             </div>
           </div>
         </div>
         
-        <div className="bg-gray-50 py-4 px-4 border-t border-gray-200">
+        <div className="bg-gray-50 py-3 sm:py-4 px-4 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
-            &copy; {new Date().getFullYear()} Sistema de Gestão de Pessoal de Obras. Todos os direitos reservados.
+            &copy; {new Date().getFullYear()} Sistema de Gestão de Pessoal de Obras
           </p>
           <p className="text-xs text-center text-gray-400 mt-1">
-            Modo de demonstração - Use qualquer credencial de teste
+            Modo de demonstração - Use credenciais de teste
           </p>
         </div>
       </div>
+
+      {/* Estilos para animações */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
