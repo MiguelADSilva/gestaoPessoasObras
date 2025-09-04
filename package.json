@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "build:netlify": "next build"
@@ -15,15 +15,15 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.19.0",
     "mongoose": "^8.18.0",
-    "next": "15.5.2",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.5",
     "tailwindcss": "^4"
   }
 }
