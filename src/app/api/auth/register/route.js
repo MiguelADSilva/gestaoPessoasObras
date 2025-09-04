@@ -19,8 +19,6 @@ export async function POST(request) {
 
     // 2. Obter dados do request
     const { nome, email, password, tipo = 'cliente' } = await request.json();
-    
-    console.log('📝 Tentativa de registro:', { nome, email, tipo });
 
     // 3. Validações
     if (!nome || !email || !password) {
@@ -41,8 +39,6 @@ export async function POST(request) {
     client = new MongoClient(process.env.MONGODB_URI);
     await client.connect();
     const db = client.db('gestaoobras');
-    
-    console.log('✅ Conectado à base de dados');
 
     // 5. Verificar se usuário já existe
     const existingUser = await db.collection('users').findOne({
@@ -59,7 +55,6 @@ export async function POST(request) {
 
     // 6. Criptografar password
     const hashedPassword = await bcrypt.hash(password, 12);
-    console.log('🔐 Password criptografada');
 
     // 7. Criar usuário
     const userData = {
@@ -73,7 +68,6 @@ export async function POST(request) {
     };
 
     const result = await db.collection('users').insertOne(userData);
-    console.log('👤 Utilizador inserido com ID:', result.insertedId);
 
     // 8. Gerar token JWT
     const token = jwt.sign(
