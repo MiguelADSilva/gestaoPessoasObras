@@ -1,15 +1,13 @@
 [build]
   command = "npm run build:netlify"
-  publish = ".next"
+  publish = "out"
 
 [build.environment]
   NODE_ENV = "production"
+  NEXT_TELEMETRY_DISABLED = "1"
 
-# Desative o plugin Next.js do Netlify se estiver causando problemas
-# [plugins]
-#   package = "@netlify/plugin-nextjs"
-#   [plugins.inputs]
-#     enableNextJs = false
+[context.production.environment]
+  NODE_VERSION = "18.20.0"
 
 [[headers]]
   for = "/*"
@@ -17,3 +15,9 @@
     X-Frame-Options = "DENY"
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
+
+# Redirects para SPA (Single Page Application)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
