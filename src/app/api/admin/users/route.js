@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/auth-admin';
-import User from '@/models/User';
+import { authenticateAdmin } from '../../../../lib/auth-admin';
+import User from '../../../../models/User';
 
 export async function GET(request) {
   try {

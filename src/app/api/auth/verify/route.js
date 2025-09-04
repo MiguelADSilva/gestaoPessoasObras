@@ -1,6 +1,6 @@
 // src/app/api/auth/verify/route.js
 import { NextResponse } from 'next/server';
-import { authenticateToken } from '@/lib/auth';
+import { authenticateToken } from '../../../../lib/auth';
 
 export async function GET(request) {
   try {
