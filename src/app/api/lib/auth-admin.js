@@ -1,7 +1,7 @@
 // src/lib/auth-admin.js
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import User from '@/models/User';
+import User from '@/app/api/models/User';
 
 export async function authenticateAdmin(request) {
   try {

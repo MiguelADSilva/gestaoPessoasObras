@@ -1,6 +1,6 @@
 // src/app/api/obras/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '../../../lib/database';
+import { connectToDatabase } from '../lib/database';
 import { ObjectId } from 'mongodb';
 
 // GET - Obter todas as obras (com pesquisa opcional)

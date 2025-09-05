@@ -1,6 +1,6 @@
 // src/app/api/obras/[id]/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from './../../../../lib/database';
+import { connectToDatabase } from '../../lib/database';
 import { ObjectId } from 'mongodb';
 
 // GET - Obter obra por ID
