@@ -38,7 +38,7 @@ export async function POST(request) {
     // 4. Conectar à base de dados
     client = new MongoClient(process.env.MONGODB_URI);
     await client.connect();
-    const db = client.db('gestaoobras');
+    const db = client.db(process.env.MONGODB_DB);
 
     // 5. Verificar se usuário já existe
     const existingUser = await db.collection('users').findOne({
