@@ -1,9 +1,10 @@
+// src/app/api/colaboradores/count/route.js
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { connectToDatabase } from '../../lib/database';
-import User from '../../models/User';
 
 function getBearerToken(request) {
   const auth = request.headers.get('authorization') || '';
@@ -12,26 +13,23 @@ function getBearerToken(request) {
 
 export async function GET(request) {
   try {
-    await connectToDatabase();
-
     const token = getBearerToken(request);
     if (!token) return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 });
 
-    try {
-      jwt.verify(token, process.env.JWT_SECRET);
-    } catch (e) {
-      console.error('JWT verify error:', e?.message);
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
-    }
+    try { jwt.verify(token, process.env.JWT_SECRET); }
+    catch { return NextResponse.json({ error: 'Token inválido' }, { status: 401 }); }
 
-    const count = await User.countDocuments({
+    const { db } = await connectToDatabase();
+    await db.command({ ping: 1 }); // opcional
+
+    const count = await db.collection('users').countDocuments({
       tipo: { $in: ['admin', 'gestor', 'tecnico'] },
       estado: 'ativo',
     });
 
     return NextResponse.json({ count });
   } catch (e) {
-    console.error('Erro /api/colaboradores/count:', e?.message);
+    console.error('Erro /api/colaboradores/count:', e?.message, e?.stack);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
