@@ -16,7 +16,7 @@ export default function Login() {
 
   // Credenciais de teste para demonstração
   const testCredentials = [
-    { email: 'admin@obras.pt', password: 'admin123' },
+    { email: 'miguel@email.com', password: 'miguel123' },
     { email: 'gestor@obras.pt', password: 'gestor123' },
     { email: 'teste@teste.pt', password: 'teste123' },
     { email: 'demo@demo.pt', password: 'demo123' },

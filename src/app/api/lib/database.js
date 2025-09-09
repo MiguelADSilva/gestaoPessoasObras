@@ -1,66 +1,41 @@
+// src/app/api/lib/database.js
 import { MongoClient } from 'mongodb';
 
 const uri = process.env.MONGODB_URI;
-const options = {};
+if (!uri) throw new Error('Falta MONGODB_URI no .env.local');
 
-let client;
-let clientPromise;
+const DEFAULT_OPTS = {
+  // evita ficar à espera para sempre se não consegue ligar
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 20000,
+};
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Please add your Mongo URI to .env.local');
-}
+// cache global para evitar múltiplas conexões em dev/prod
+let cached = globalThis.__mongo;
+if (!cached) cached = globalThis.__mongo = { clientPromise: null };
 
-// No Netlify, não temos variável NODE_ENV='development' no build
-// Precisamos de uma solução mais robusta
-if (typeof window === 'undefined') {
-  // Estamos no lado do servidor
-  if (process.env.NODE_ENV === 'development') {
-    // Modo desenvolvimento - usa global para hot reload
-    if (!global._mongoClientPromise) {
-      client = new MongoClient(uri, options);
-      global._mongoClientPromise = client.connect();
-    }
-    clientPromise = global._mongoClientPromise;
-  } else {
-    // Modo produção - nova conexão (Netlify functions são stateless)
-    client = new MongoClient(uri, options);
-    clientPromise = client.connect();
-  }
-} else {
-  // Estamos no lado do cliente - não deve acontecer
-  clientPromise = null;
-}
-
-// Função principal melhorada para Netlify
-export async function connectToDatabase() {
-  try {
-    if (!clientPromise) {
-      throw new Error('MongoDB client is not initialized');
-    }
-    
-    const client = await clientPromise;
-    const dbName = process.env.MONGODB_DB || getDatabaseNameFromURI(uri);
-    const db = client.db(dbName);
-    
-    return { client, db };
-  } catch (error) {
-    console.error('Database connection error:', error);
-    throw new Error(`Failed to connect to database: ${error.message}`);
-  }
-}
-
-// Helper function para extrair o nome do database da URI
-function getDatabaseNameFromURI(mongoURI) {
+function getDbNameFromUri(mongoURI) {
   try {
     const url = new URL(mongoURI);
-    // Remove a barra inicial do pathname
-    return url.pathname.replace(/^\//, '');
-  } catch (error) {
-    // Fallback para URI antiga ou padrão
+    const name = url.pathname.replace(/^\//, '');
+    return name || process.env.MONGODB_DB || 'test';
+  } catch {
     const match = mongoURI.match(/\/([^/?]+)(\?|$)/);
-    return match ? match[1] : 'test';
+    return (match && match[1]) || process.env.MONGODB_DB || 'test';
   }
 }
 
-// Export para compatibilidade
+export async function connectToDatabase() {
+  if (!cached.clientPromise) {
+    const client = new MongoClient(uri, DEFAULT_OPTS);
+    cached.clientPromise = client.connect();
+  }
+
+  const client = await cached.clientPromise;
+  const dbName = getDbNameFromUri(uri);
+  const db = client.db(dbName);
+
+  return { client, db };
+}
+
 export default connectToDatabase;
