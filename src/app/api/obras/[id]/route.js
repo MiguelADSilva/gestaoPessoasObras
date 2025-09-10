@@ -3,152 +3,84 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../../lib/database';
 import { ObjectId } from 'mongodb';
 
-// GET - Obter obra por ID
-export async function GET(request, { params }) {
-  try {
-    const { id } = params;
-    
-    if (!ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: 'ID inválido' },
-        { status: 400 }
-      );
-    }
-
-    const { db } = await connectToDatabase();
-    const obra = await db.collection('obras').findOne({
-      _id: new ObjectId(id)
-    });
-
-    if (!obra) {
-      return NextResponse.json(
-        { error: 'Obra não encontrada' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(obra);
-
-  } catch (error) {
-    console.error('Erro ao buscar obra:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
-  }
+// Aceita _id como ObjectId OU string (para dados antigos)
+function buildIdFilter(id) {
+  const ors = [];
+  if (ObjectId.isValid(id)) ors.push({ _id: new ObjectId(id) });
+  ors.push({ _id: id });
+  return ors.length === 1 ? ors[0] : { $or: ors };
 }
 
-// PUT - Atualizar obra
+// Normaliza doc (garante id string e estadoObra)
+function normalize(doc) {
+  if (!doc) return null;
+  const id =
+    typeof doc._id === 'string'
+      ? doc._id
+      : (doc._id && doc._id.toString ? doc._id.toString() : doc._id);
+  return {
+    ...doc,
+    id,
+    _id: id,
+    estadoObra: doc.estadoObra || doc.estado || 'planeamento',
+  };
+}
+
+// PUT - Atualizar obra (estável)
 export async function PUT(request, { params }) {
   try {
     const { id } = params;
-    
-    if (!ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: 'ID inválido' },
-        { status: 400 }
-      );
-    }
-
-    const updateData = await request.json();
+    const body = await request.json();
     const { db } = await connectToDatabase();
 
-    // Verificar se obra existe
-    const obraExistente = await db.collection('obras').findOne({
-      _id: new ObjectId(id)
-    });
+    const estadoFinal = body.estadoObra || body.estado;
 
-    if (!obraExistente) {
-      return NextResponse.json(
-        { error: 'Obra não encontrada' },
-        { status: 404 }
-      );
+    const update = {
+      ...body,
+      ...(estadoFinal ? { estadoObra: estadoFinal, estado: estadoFinal } : {}),
+      dataAtualizacao: new Date(),
+    };
+
+    delete update._id;
+    delete update.id;
+
+    // 1) Atualiza
+    const result = await db.collection('obras').updateOne(buildIdFilter(id), { $set: update });
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: 'Obra não encontrada' }, { status: 404 });
     }
 
-    // Atualizar obra
-    const result = await db.collection('obras').updateOne(
-      { _id: new ObjectId(id) },
-      { 
-        $set: {
-          ...updateData,
-          dataAtualizacao: new Date()
-        }
-      }
-    );
+    // 2) Lê novamente para devolver ao cliente
+    const updated = await db.collection('obras').findOne(buildIdFilter(id));
 
-    if (result.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: 'Nenhuma alteração realizada' },
-        { status: 400 }
-      );
-    }
-
-    // Retornar obra atualizada
-    const obraAtualizada = await db.collection('obras').findOne({
-      _id: new ObjectId(id)
-    });
-
-    return NextResponse.json({
-      message: 'Obra atualizada com sucesso',
-      obra: obraAtualizada
-    });
-
+    return NextResponse.json({ message: 'Obra atualizada', obra: normalize(updated) }, { status: 200 });
   } catch (error) {
     console.error('Erro ao atualizar obra:', error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Erro interno do servidor ao atualizar obra' },
       { status: 500 }
     );
   }
 }
 
-// DELETE - Apagar obra
+// DELETE - Remover obra
 export async function DELETE(request, { params }) {
   try {
     const { id } = params;
-    
-    if (!ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: 'ID inválido' },
-        { status: 400 }
-      );
-    }
-
     const { db } = await connectToDatabase();
 
-    // Verificar se obra existe
-    const obraExistente = await db.collection('obras').findOne({
-      _id: new ObjectId(id)
-    });
-
-    if (!obraExistente) {
-      return NextResponse.json(
-        { error: 'Obra não encontrada' },
-        { status: 404 }
-      );
-    }
-
-    // Apagar obra
-    const result = await db.collection('obras').deleteOne({
-      _id: new ObjectId(id)
-    });
+    const result = await db.collection('obras').deleteOne(buildIdFilter(id));
 
     if (result.deletedCount === 0) {
-      return NextResponse.json(
-        { error: 'Falha ao apagar obra' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Obra não encontrada' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      message: 'Obra apagada com sucesso',
-      id: id
-    });
-
+    return NextResponse.json({ message: 'Obra eliminada com sucesso' }, { status: 200 });
   } catch (error) {
-    console.error('Erro ao apagar obra:', error);
+    console.error('Erro ao eliminar obra:', error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Erro interno do servidor ao eliminar obra' },
       { status: 500 }
     );
   }

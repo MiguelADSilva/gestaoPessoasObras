@@ -4,43 +4,76 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function Login() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const router = useRouter();
 
-  // Credenciais de teste para demonstração
+  // Credenciais de teste (opcional)
   const testCredentials = [
     { email: 'miguel@email.com', password: 'miguel123' },
-    { email: 'gestor@obras.pt', password: 'gestor123' },
+    { email: 'fabio@gmail.com', password: 'fabio123' },
     { email: 'teste@teste.pt', password: 'teste123' },
     { email: 'demo@demo.pt', password: 'demo123' },
   ];
 
-  // Limpar mensagens após 5 segundos
+  // Limpar mensagens após 5s
   useEffect(() => {
     if (error || success) {
-      const timer = setTimeout(() => {
+      const t = setTimeout(() => {
         setError('');
         setSuccess('');
       }, 5000);
-      
-      return () => clearTimeout(timer);
+      return () => clearTimeout(t);
     }
   }, [error, success]);
 
+  // Helpers
+  const setCookie = (name, value, days = 7) => {
+    try {
+      const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = `${name}=${encodeURIComponent(value)}; Expires=${expires}; Path=/; SameSite=Lax`;
+    } catch {}
+  };
+
+  const clearCookie = (name) => {
+    try {
+      document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+    } catch {}
+  };
+
+  const persistAuth = (token, user, remember) => {
+    // Normaliza o user pra garantir nome/tipo presentes
+    const safeUser = {
+      _id: user?._id || user?.id || null,
+      nome: user?.nome || user?.name || user?.displayName || user?.email || '',
+      email: user?.email || '',
+      tipo: (user?.tipo || user?.role || 'cliente').toLowerCase(),
+      estado: user?.estado || 'ativo',
+      avatar: user?.avatar || null,
+      createdAt: user?.createdAt || null,
+      updatedAt: user?.updatedAt || null,
+    };
+
+    if (remember) {
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(safeUser));
+      // cookie com o token (opcional, ajuda em chamadas server-side no futuro)
+      setCookie('token', token, 7);
+    } else {
+      sessionStorage.setItem('token', token);
+      sessionStorage.setItem('user', JSON.stringify(safeUser));
+      // para sessão, não persistimos cookie longo
+      clearCookie('token');
+    }
+  };
+
+  // Handlers
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prevState => ({
-      ...prevState,
-      [name]: value
-    }));
-    // Limpar mensagens quando o usuário começar a digitar
+    setFormData((s) => ({ ...s, [name]: value }));
     if (error) setError('');
     if (success) setSuccess('');
   };
@@ -50,52 +83,48 @@ export default function Login() {
     setIsLoading(true);
     setError('');
     setSuccess('');
-    
+
     try {
-      const response = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: (formData.email || '').trim(),
+          password: formData.password || '',
+        }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (response.ok) {
-        // Login bem-sucedido
-        setSuccess('Login bem-sucedido! Redirecionando...');
-        
-        // Guardar token e dados do usuário
-        if (rememberMe) {
-          localStorage.setItem('token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-        } else {
-          sessionStorage.setItem('token', data.token);
-          sessionStorage.setItem('user', JSON.stringify(data.user));
-        }
-
-        // Redirecionar após breve delay para mostrar mensagem
-        setTimeout(() => {
-          router.push('/homepage');
-        }, 1500);
-        
-      } else {
-        setError(data.error || 'Erro no login. Verifique suas credenciais.');
+      if (!res.ok) {
+        setError(data?.error || 'Erro no login. Verifique as suas credenciais.');
+        return;
       }
-    } catch (error) {
-      setError('Erro de conexão com o servidor. Tente novamente.');
-      console.error('Erro no login:', error);
+
+      // Esperado do backend: { user: {...}, token: '...' }
+      const token = data?.token;
+      const user = data?.user;
+
+      if (!token || !user) {
+        setError('Resposta do servidor incompleta. Tente novamente.');
+        return;
+      }
+
+      // GUARDA: token + (nome, tipo, etc)
+      persistAuth(token, user, rememberMe);
+
+      setSuccess('Login bem-sucedido! A redirecionar...');
+      setTimeout(() => router.push('/homepage'), 800);
+    } catch (err) {
+      console.error('Erro no login:', err);
+      setError('Erro de ligação ao servidor. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const fillTestCredentials = (email, password) => {
-    setFormData({
-      email: email,
-      password: password
-    });
+    setFormData({ email, password });
     setError('');
     setSuccess('Credenciais preenchidas! Clique em Entrar.');
   };
@@ -115,18 +144,18 @@ export default function Login() {
             Gestão de Pessoal de Obras
           </h2>
           <p className="mt-1 sm:mt-2 text-center text-xs sm:text-sm text-orange-100">
-            Acesso restrito à equipe autorizada
+            Acesso restrito à equipa autorizada
           </p>
         </div>
-        
+
         <div className="py-6 sm:py-8 px-4 sm:px-6">
-          {/* Credenciais de teste para facilitar */}
+          {/* Credenciais de Teste */}
           <div className="mb-4 sm:mb-6 bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
             <h3 className="text-xs sm:text-sm font-medium text-blue-800 mb-2">Credenciais de Teste:</h3>
             <div className="space-y-1 sm:space-y-2">
-              {testCredentials.map((cred, index) => (
+              {testCredentials.map((cred, idx) => (
                 <button
-                  key={index}
+                  key={idx}
                   type="button"
                   onClick={() => fillTestCredentials(cred.email, cred.password)}
                   className="text-xs text-blue-600 hover:text-blue-800 underline block w-full text-left transition duration-200"
@@ -141,7 +170,7 @@ export default function Login() {
           </div>
 
           <form className="space-y-4 sm:space-y-6" onSubmit={handleSubmit}>
-            {/* Mensagens de Sucesso */}
+            {/* Sucesso */}
             {success && (
               <div className="bg-green-50 text-green-700 p-3 rounded-md text-sm animate-fade-in">
                 <div className="flex items-center">
@@ -151,7 +180,7 @@ export default function Login() {
               </div>
             )}
 
-            {/* Mensagens de Erro */}
+            {/* Erro */}
             {error && (
               <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm animate-fade-in">
                 <div className="flex items-center">
@@ -160,7 +189,7 @@ export default function Login() {
                 </div>
               </div>
             )}
-            
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                 Email
@@ -208,7 +237,7 @@ export default function Login() {
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+              <label className="flex items-center">
                 <input
                   id="remember-me"
                   name="remember-me"
@@ -218,46 +247,40 @@ export default function Login() {
                   onChange={() => setRememberMe(!rememberMe)}
                   disabled={isLoading}
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-xs sm:text-sm text-gray-700">
-                  Lembrar-me
-                </label>
-              </div>
+                <span className="ml-2 block text-xs sm:text-sm text-gray-700">Lembrar-me</span>
+              </label>
 
-              <div className="text-xs sm:text-sm">
-                <button
-                  type="button"
-                  className="font-medium text-orange-600 hover:text-orange-500 transition duration-300"
-                  onClick={() => setError('Funcionalidade em desenvolvimento')}
-                >
-                  Esqueceu a password?
-                </button>
-              </div>
-            </div>
-
-            <div>
               <button
-                type="submit"
-                disabled={isLoading}
-                className={`group relative w-full flex justify-center py-2 sm:py-3 px-4 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition duration-300 ${
-                  isLoading ? 'opacity-75 cursor-not-allowed' : 'transform hover:scale-105'
-                }`}
+                type="button"
+                className="text-xs sm:text-sm font-medium text-orange-600 hover:text-orange-500 transition duration-300"
+                onClick={() => setError('Funcionalidade em desenvolvimento')}
               >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 sm:h-5 sm:w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    A processar...
-                  </>
-                ) : (
-                  <>
-                    <i className="fas fa-sign-in-alt mr-2"></i>
-                    Entrar
-                  </>
-                )}
+                Esqueceu a password?
               </button>
             </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`group relative w-full flex justify-center py-2 sm:py-3 px-4 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition duration-300 ${
+                isLoading ? 'opacity-75 cursor-not-allowed' : 'transform hover:scale-105'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 sm:h-5 sm:w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  A processar...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-sign-in-alt mr-2"></i>
+                  Entrar
+                </>
+              )}
+            </button>
           </form>
 
           <div className="mt-4 sm:mt-6">
@@ -266,12 +289,10 @@ export default function Login() {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-xs sm:text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  Acesso seguro
-                </span>
+                <span className="px-2 bg-white text-gray-500">Acesso seguro</span>
               </div>
             </div>
-            
+
             <div className="mt-3 sm:mt-4 grid grid-cols-2 gap-2 sm:gap-4">
               <div className="text-center">
                 <div className="mx-auto flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-50">
@@ -288,7 +309,7 @@ export default function Login() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-gray-50 py-3 sm:py-4 px-4 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
             &copy; {new Date().getFullYear()} Sistema de Gestão de Pessoal de Obras

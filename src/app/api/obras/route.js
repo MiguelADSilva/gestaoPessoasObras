@@ -1,47 +1,86 @@
 // src/app/api/obras/route.js
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../lib/database';
-import { ObjectId } from 'mongodb';
 
-// GET - Obter todas as obras (com pesquisa opcional)
+// GET - Obter todas as obras (com pesquisa/filtros/paginação)
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
-    const estado = searchParams.get('estado') || '';
-    const page = parseInt(searchParams.get('page')) || 1;
-    const limit = parseInt(searchParams.get('limit')) || 10;
+
+    const search = (searchParams.get('search') || '').trim();
+    const localizacao = (searchParams.get('localizacao') || '').trim();
+
+    // compat: alguns docs têm "estado", outros "estadoObra"
+    const estado = (searchParams.get('estado') || '').trim();
+    const estadoObra = (searchParams.get('estadoObra') || '').trim();
+    const estadoFinal = estado || estadoObra;
+
+    const priceMin = searchParams.get('priceMin');
+    const priceMax = searchParams.get('priceMax');
+
+    const page = Math.max(parseInt(searchParams.get('page')) || 1, 1);
+    const limit = Math.max(parseInt(searchParams.get('limit')) || 10, 1);
 
     const { db } = await connectToDatabase();
-    
-    // Construir query de pesquisa
-    let query = {};
-    
+
+    // Construir query com AND entre os vários critérios.
+    const andParts = [];
+
     if (search) {
-      query.$or = [
-        { nome: { $regex: search, $options: 'i' } },
-        { localizacao: { $regex: search, $options: 'i' } },
-        { responsavel: { $regex: search, $options: 'i' } }
-      ];
+      andParts.push({
+        $or: [
+          { nome: { $regex: search, $options: 'i' } },
+          { localizacao: { $regex: search, $options: 'i' } },
+          { responsavelGeral: { $regex: search, $options: 'i' } }, // campo atual
+          { responsavel: { $regex: search, $options: 'i' } },      // compat antigo
+        ],
+      });
     }
-    
-    if (estado) {
-      query.estado = estado;
+
+    if (localizacao) {
+      andParts.push({ localizacao: { $regex: localizacao, $options: 'i' } });
     }
+
+    if (estadoFinal) {
+      andParts.push({
+        $or: [{ estado: estadoFinal }, { estadoObra: estadoFinal }],
+      });
+    }
+
+    if (priceMin || priceMax) {
+      const range = {};
+      if (priceMin !== null && priceMin !== '' && !Number.isNaN(Number(priceMin))) {
+        range.$gte = Number(priceMin);
+      }
+      if (priceMax !== null && priceMax !== '' && !Number.isNaN(Number(priceMax))) {
+        range.$lte = Number(priceMax);
+      }
+      andParts.push({ orcamentoTotal: range });
+    }
+
+    const query = andParts.length ? { $and: andParts } : {};
 
     // Paginação
     const skip = (page - 1) * limit;
-    
-    const obras = await db.collection('obras')
+
+    const obrasRaw = await db
+      .collection('obras')
       .find(query)
       .sort({ dataCriacao: -1 })
       .skip(skip)
       .limit(limit)
       .toArray();
 
-    // Contar total para paginação
     const total = await db.collection('obras').countDocuments(query);
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+
+    // Normalizar resposta (garantir id string e estadoObra)
+    const obras = obrasRaw.map((o) => ({
+      ...o,
+      id: o._id?.toString(),
+      _id: o._id?.toString(), // opcional manter para compat
+      estadoObra: o.estadoObra || o.estado || 'planeamento',
+    }));
 
     return NextResponse.json({
       obras,
@@ -51,10 +90,9 @@ export async function GET(request) {
         total,
         totalPages,
         hasNext: page < totalPages,
-        hasPrev: page > 1
-      }
+        hasPrev: page > 1,
+      },
     });
-
   } catch (error) {
     console.error('Erro ao buscar obras:', error);
     return NextResponse.json(
@@ -68,7 +106,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const obraData = await request.json();
-    
+
     // Validação básica
     if (!obraData.nome || !obraData.localizacao) {
       return NextResponse.json(
@@ -78,11 +116,11 @@ export async function POST(request) {
     }
 
     const { db } = await connectToDatabase();
-    
-    // Verificar se obra já existe
+
+    // Verificar duplicado simples
     const obraExistente = await db.collection('obras').findOne({
       nome: obraData.nome,
-      localizacao: obraData.localizacao
+      localizacao: obraData.localizacao,
     });
 
     if (obraExistente) {
@@ -92,29 +130,34 @@ export async function POST(request) {
       );
     }
 
-    // Adicionar dados automáticos
+    // Normalização de campos
+    const estadoFinal = obraData.estadoObra || obraData.estado || 'planeamento';
+
     const obraCompleta = {
       ...obraData,
-      estado: obraData.estado || 'planeamento',
+      estadoObra: estadoFinal,
+      estado: estadoFinal, // compat
       dataCriacao: new Date(),
-      dataAtualizacao: new Date()
+      dataAtualizacao: new Date(),
     };
 
     const result = await db.collection('obras').insertOne(obraCompleta);
-    
-    // Retornar a obra criada
-    const obraCriada = await db.collection('obras').findOne({
-      _id: result.insertedId
+
+    const obraCriadaRaw = await db.collection('obras').findOne({
+      _id: result.insertedId,
     });
 
+    const obraCriada = {
+      ...obraCriadaRaw,
+      id: obraCriadaRaw._id?.toString(),
+      _id: obraCriadaRaw._id?.toString(),
+      estadoObra: obraCriadaRaw.estadoObra || obraCriadaRaw.estado || 'planeamento',
+    };
+
     return NextResponse.json(
-      { 
-        message: 'Obra criada com sucesso', 
-        obra: obraCriada 
-      },
+      { message: 'Obra criada com sucesso', obra: obraCriada },
       { status: 201 }
     );
-
   } catch (error) {
     console.error('Erro ao criar obra:', error);
     return NextResponse.json(
