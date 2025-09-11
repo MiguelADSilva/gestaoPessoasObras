@@ -1,6 +1,7 @@
 // src/app/api/users/route.js
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../lib/database';
+export const dynamic = 'force-dynamic'; 
 
 // GET - Listar utilizadores com filtros
 export async function GET(request) {
