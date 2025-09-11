@@ -1,17 +1,18 @@
+// src/app/layout.js
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-
-// importa o CSS do Font Awesome (instalado via npm)
 import "@fortawesome/fontawesome-free/css/all.min.css";
 
 const inter = Inter({
-  variable: "--font-Inter-sans",
+  variable: "--font-inter-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const jetMono = JetBrains_Mono({
-  variable: "--font-Inter-mono",
+  variable: "--font-inter-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata = {
@@ -21,10 +22,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="pt">
-      <body className={`${inter.variable} ${jetMono.variable} antialiased`}>
-        {children}
-      </body>
+    <html lang="pt" className={`${inter.variable} ${jetMono.variable}`}>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
