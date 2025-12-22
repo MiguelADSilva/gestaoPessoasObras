@@ -20,7 +20,7 @@
     "bcryptjs": "^3.0.2",
     "date-fns": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^6.19.0",
+    "mongodb": "^6.21.0",
     "mongoose": "^8.18.0",
     "netlify-cli": "^23.5.1",
     "next": "^14.2.32",

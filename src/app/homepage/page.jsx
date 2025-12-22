@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+import AnotacoesHub from '../anotacoeshub/anotecoeshub';
+
 export default function Homepage() {
   const router = useRouter();
 
@@ -1515,12 +1517,10 @@ export default function Homepage() {
 
       case 'anotacoes':
         return (
-          <div className="p-6 pb-24 lg:pb-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Anotações</h2>
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <p className="text-gray-600">Página de gestão de anotações por obra.</p>
+           <div className="p-6 pb-24 lg:pb-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">Anotações</h2>
+              <AnotacoesHub />
             </div>
-          </div>
         );
 
       case 'planeamento':
