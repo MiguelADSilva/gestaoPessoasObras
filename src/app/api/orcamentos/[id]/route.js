@@ -35,10 +35,23 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    await dbConnect();
-    await Orcamento.findByIdAndDelete(params.id);
+    await connectToDatabase();
+    const id = params?.id;
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID em falta.' }, { status: 400 });
+    }
+
+    const deleted = await Orcamento.findByIdAndDelete(id);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Orçamento não encontrado.' }, { status: 404 });
+    }
+
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Erro ao eliminar orçamento' }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e?.message || 'Erro ao eliminar orçamento.' },
+      { status: 500 }
+    );
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import OrcamentosHub from '../orcamentosHub/orcamentosHub';
+import VerOrcamentos from '../verOrcamentos/verOrcamentos';
 
 export default function AnotacoesHub() {
   const [view, setView] = React.useState('menu'); // 'menu' | 'materiais' | 'orcamentos' | 'ver_orcamentos'
@@ -41,7 +42,7 @@ export default function AnotacoesHub() {
 
       {view === 'orcamentos' && <OrcamentosHub onBack={() => setView('menu')} />}
 
-      {view === 'ver_orcamentos' && <VerOrcamentosPage onBack={() => setView('menu')} />}
+      {view === 'ver_orcamentos' && <VerOrcamentos onBack={() => setView('menu')} />}
     </div>
   );
 }
@@ -152,6 +153,16 @@ function MaterialsManager({ onBack }) {
     fornecedor: '',
     notas: '',
   };
+
+  const getMaterialId = (m) => {
+    if (!m) return null;
+    if (typeof m._id === 'string') return m._id;
+    if (typeof m.id === 'string') return m.id;
+    if (m._id && typeof m._id.$oid === 'string') return m._id.$oid;
+    if (m._id && typeof m._id.toString === 'function') return m._id.toString();
+    return null;
+  };
+
   const [form, setForm] = React.useState(emptyForm);
 
   const fetchMateriais = React.useCallback(async () => {
@@ -166,7 +177,24 @@ function MaterialsManager({ onBack }) {
       const res = await fetch(`/api/materiais?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Erro ao carregar materiais.');
-      setItems(Array.isArray(data?.items) ? data.items : []);
+      const raw = Array.isArray(data?.items) ? data.items : [];
+
+        const normalized = raw
+          .map((m) => {
+            const id =
+              typeof m?._id === 'string'
+                ? m._id
+                : (m?._id && typeof m._id.$oid === 'string')
+                ? m._id.$oid
+                : (m?.id && typeof m.id === 'string')
+                ? m.id
+                : null;
+
+            return { ...m, _id: id };
+          })
+          .filter((m) => !!m._id);
+
+        setItems(normalized);
     } catch (e) {
       setItems([]);
       setError(e?.message || 'Erro ao carregar materiais.');
@@ -186,69 +214,87 @@ function MaterialsManager({ onBack }) {
   };
 
   const openEdit = (m) => {
-    setEditing(m);
-    setForm({
-      nome: m?.nome || '',
-      categoria: m?.categoria || '',
-      marca: m?.marca || '',
-      referencia: m?.referencia || '',
-      unidade: m?.unidade || 'un',
-      iva: Number(m?.iva ?? 23),
-      precoCompra: m?.precoCompra ?? '',
-      precoVenda: m?.precoVenda ?? '',
-      stockAtual: m?.stockAtual ?? '',
-      fornecedor: m?.fornecedor || '',
-      notas: m?.notas || '',
-    });
-    setModalOpen(true);
-  };
+  const id = getMaterialId(m);
+  setEditing({ ...m, _id: id }); // garante string
+
+  setForm({
+    nome: m?.nome || '',
+    categoria: m?.categoria || '',
+    marca: m?.marca || '',
+    referencia: m?.referencia || '',
+    unidade: m?.unidade || 'un',
+    iva: Number(m?.iva ?? 23),
+    precoCompra: m?.precoCompra ?? '',
+    precoVenda: m?.precoVenda ?? '',
+    stockAtual: m?.stockAtual ?? '',
+    fornecedor: m?.fornecedor || '',
+    notas: m?.notas || '',
+  });
+
+  setModalOpen(true);
+};
 
   const submit = async () => {
-    const nome = (form.nome || '').trim();
-    if (!nome) return setError('O nome é obrigatório.');
+  const nome = (form.nome || '').trim();
+  if (!nome) return setError('O nome é obrigatório.');
 
-    setSaving(true);
+  setSaving(true);
+  setError('');
+
+  try {
+    const payload = {
+      ...form,
+      nome,
+      categoria: (form.categoria || '').trim() || 'geral',
+      marca: (form.marca || '').trim(),
+      referencia: (form.referencia || '').trim(),
+      unidade: (form.unidade || 'un').trim(),
+      iva: Number(form.iva ?? 23),
+      precoCompra: form.precoCompra === '' ? 0 : Number(form.precoCompra),
+      precoVenda: form.precoVenda === '' ? 0 : Number(form.precoVenda),
+      stockAtual: form.stockAtual === '' ? 0 : Number(form.stockAtual),
+      fornecedor: (form.fornecedor || '').trim(),
+      notas: (form.notas || '').trim(),
+    };
+
+    const isEdit = !!editing?._id;
+    const url = isEdit ? `/api/materiais/${editing._id}` : `/api/materiais`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || 'Erro ao guardar material.');
+
+    // ✅ Atualiza a tabela sem fazer GET (evita erro do fetchMateriais)
+    const saved = data;
+
+    setItems((prev) => {
+      const id = saved?._id;
+      if (!id) return prev;
+
+      if (isEdit) {
+        return prev.map((it) => (it._id === id ? saved : it));
+      }
+      // novo: adiciona no topo
+      return [saved, ...prev];
+    });
+
+    setModalOpen(false);
+    setEditing(null);
+    setForm(emptyForm);
     setError('');
+  } catch (e) {
+    setError(e?.message || 'Erro ao guardar material.');
+  } finally {
+    setSaving(false);
+  }
+};
 
-    try {
-      const payload = {
-        ...form,
-        nome,
-        categoria: (form.categoria || '').trim() || 'geral',
-        marca: (form.marca || '').trim(),
-        referencia: (form.referencia || '').trim(),
-        unidade: (form.unidade || 'un').trim(),
-        iva: Number(form.iva ?? 23),
-        precoCompra: form.precoCompra === '' ? 0 : Number(form.precoCompra),
-        precoVenda: form.precoVenda === '' ? 0 : Number(form.precoVenda),
-        stockAtual: form.stockAtual === '' ? 0 : Number(form.stockAtual),
-        fornecedor: (form.fornecedor || '').trim(),
-        notas: (form.notas || '').trim(),
-      };
-
-      const isEdit = !!editing?._id;
-      const url = isEdit ? `/api/materiais/${editing._id}` : `/api/materiais`;
-      const method = isEdit ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Erro ao guardar material.');
-
-      setModalOpen(false);
-      setEditing(null);
-      setForm(emptyForm);
-      await fetchMateriais();
-    } catch (e) {
-      setError(e?.message || 'Erro ao guardar material.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const remove = async (m) => {
     if (!m?._id) return;
