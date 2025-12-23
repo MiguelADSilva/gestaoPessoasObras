@@ -3,13 +3,13 @@ import React from 'react';
 import OrcamentosHub from '../orcamentosHub/orcamentosHub';
 
 export default function AnotacoesHub() {
-  const [view, setView] = React.useState('menu'); // 'menu' | 'materiais' | 'orcamentos'
+  const [view, setView] = React.useState('menu'); // 'menu' | 'materiais' | 'orcamentos' | 'ver_orcamentos'
 
   return (
     <div className="space-y-6">
-      {/* MENU (2 cards) */}
+      {/* MENU (3 cards) */}
       {view === 'menu' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <ActionCard
             title="Adicionar Materiais"
             subtitle="Guardar, pesquisar, editar e eliminar materiais elétricos"
@@ -25,17 +25,23 @@ export default function AnotacoesHub() {
             accent="blue"
             onClick={() => setView('orcamentos')}
           />
+
+          <ActionCard
+            title="Ver Orçamentos"
+            subtitle="Consultar orçamentos já criados"
+            iconClass="fa-solid fa-folder-open"
+            accent="purple"
+            onClick={() => setView('ver_orcamentos')}
+          />
         </div>
       )}
 
       {/* VIEWS */}
-      {view === 'materiais' && (
-        <MaterialsManager onBack={() => setView('menu')} />
-      )}
+      {view === 'materiais' && <MaterialsManager onBack={() => setView('menu')} />}
 
-      {view === 'orcamentos' && (
-        <OrcamentosHub onBack={() => setView('menu')} />
-      )}
+      {view === 'orcamentos' && <OrcamentosHub onBack={() => setView('menu')} />}
+
+      {view === 'ver_orcamentos' && <VerOrcamentosPage onBack={() => setView('menu')} />}
     </div>
   );
 }
@@ -54,6 +60,12 @@ function ActionCard({ title, subtitle, iconClass, accent = 'orange', onClick }) 
       iconText: 'text-blue-600',
       glow: 'before:from-blue-200/40 before:to-transparent',
     },
+    purple: {
+      ring: 'hover:ring-purple-200',
+      iconBg: 'bg-purple-100',
+      iconText: 'text-purple-700',
+      glow: 'before:from-purple-200/40 before:to-transparent',
+    },
   };
   const a = accentMap[accent] || accentMap.orange;
 
@@ -67,7 +79,7 @@ function ActionCard({ title, subtitle, iconClass, accent = 'orange', onClick }) 
         'ring-1 ring-transparent hover:ring-2',
         a.ring,
         'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900/20',
-        // "shine"
+        // shine
         'before:content-[""] before:absolute before:inset-0 before:bg-gradient-to-r',
         a.glow,
         'before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-200',
@@ -81,12 +93,38 @@ function ActionCard({ title, subtitle, iconClass, accent = 'orange', onClick }) 
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <p className="mt-1 text-sm text-gray-600">{subtitle}</p>
           <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-gray-900">
-            Abrir
-            <i className="fa-solid fa-arrow-right-long opacity-70"></i>
+            Abrir <i className="fa-solid fa-arrow-right-long opacity-70"></i>
           </div>
         </div>
       </div>
     </button>
+  );
+}
+
+/* =========================
+   VIEW: VER ORÇAMENTOS (SÓ TEXTO POR AGORA)
+========================= */
+function VerOrcamentosPage({ onBack }) {
+  return (
+    <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Ver Orçamentos</h3>
+          <p className="text-sm text-gray-600">Por agora: apenas esta página.</p>
+        </div>
+
+        <button
+          onClick={onBack}
+          className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          Voltar
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-600">
+        Ver Orçamentos
+      </div>
+    </div>
   );
 }
 
@@ -279,17 +317,13 @@ function MaterialsManager({ onBack }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          onClick={fetchMateriais}
-          className="px-4 py-2 rounded-md bg-gray-900 text-white hover:bg-gray-800"
-        >
+        <button onClick={fetchMateriais} className="px-4 py-2 rounded-md bg-gray-900 text-white hover:bg-gray-800">
           Aplicar
         </button>
         <button
           onClick={() => {
             setQ('');
             setCategoria('');
-            // chama depois de limpar (microtask) para garantir state
             setTimeout(fetchMateriais, 0);
           }}
           className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -306,122 +340,118 @@ function MaterialsManager({ onBack }) {
         </div>
       )}
 
-      {/* Lista (GRID: header + rows alinhados) */}
-<div className="mt-5">
-  {/* Header */}
-  <div className="hidden md:grid grid-cols-[320px_160px_160px_120px_80px_140px_90px_110px] gap-0 bg-gray-50 border border-gray-200 rounded-t-lg">
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nome</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Marca</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Categoria</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ref.</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unid.</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Preço Venda</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Stock</div>
-    <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ações</div>
-  </div>
-
-  {/* Body */}
-  <div className="border border-gray-200 md:border-t-0 rounded-lg md:rounded-t-none overflow-hidden bg-white">
-    {loading ? (
-      <div className="px-4 py-6 text-center text-gray-500">A carregar materiais...</div>
-    ) : items.length === 0 ? (
-      <div className="px-4 py-6 text-center text-gray-500">Sem materiais registados.</div>
-    ) : (
-      items.map((m) => (
-        <div
-          key={m._id}
-          className="
-            border-t border-gray-200 first:border-t-0
-            md:grid md:grid-cols-[320px_160px_160px_120px_80px_140px_90px_110px]
-            md:items-center
-            p-4 md:p-0
-          "
-        >
-          {/* Mobile: layout tipo card */}
-          <div className="md:hidden space-y-2">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold text-gray-900 truncate">{m?.nome || '—'}</div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Marca:</span> {m?.marca || '—'}
-                </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Categoria:</span> {m?.categoria || '—'}
-                </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Ref:</span> {m?.referencia || '—'}
-                </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Unid:</span> {m?.unidade || 'un'} •{" "}
-                  <span className="font-medium">Preço:</span>{" "}
-                  {m?.precoVenda != null ? `${Number(m.precoVenda).toFixed(2)} €` : '—'} •{" "}
-                  <span className="font-medium">Stock:</span> {m?.stockAtual ?? 0}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => openEdit(m)}
-                  className="p-2 bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200"
-                  title="Editar"
-                >
-                  <i className="fa-solid fa-pen"></i>
-                </button>
-                <button
-                  onClick={() => remove(m)}
-                  className="p-2 bg-red-100 text-red-700 rounded-full hover:bg-red-200"
-                  title="Eliminar"
-                >
-                  <i className="fa-solid fa-trash"></i>
-                </button>
-              </div>
+      {/* Lista */}
+      <div className="mt-5">
+        <div className="w-full overflow-x-auto">
+          <div className="min-w-[1180px]">
+            <div className="hidden md:grid grid-cols-[320px_160px_160px_140px_90px_150px_90px_120px] gap-0 bg-gray-50 border border-gray-200 rounded-t-lg">
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nome</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Marca</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Categoria</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ref.</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Unid.</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Preço Venda</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Stock</div>
+              <div className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ações</div>
             </div>
-          </div>
 
-          {/* Desktop: colunas fixas alinhadas */}
-          <div className="hidden md:block px-4 py-4 font-medium text-gray-900 truncate">{m?.nome || '—'}</div>
-          <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.marca || '—'}</div>
-          <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.categoria || '—'}</div>
-          <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.referencia || '—'}</div>
-          <div className="hidden md:block px-4 py-4 text-gray-700">{m?.unidade || 'un'}</div>
-          <div className="hidden md:block px-4 py-4 text-gray-700">
-            {m?.precoVenda != null ? `${Number(m.precoVenda).toFixed(2)} €` : '—'}
-          </div>
-          <div className="hidden md:block px-4 py-4 text-gray-700">{m?.stockAtual ?? 0}</div>
-          <div className="hidden md:block px-4 py-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => openEdit(m)}
-                className="p-2 bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200"
-                title="Editar"
-              >
-                <i className="fa-solid fa-pen"></i>
-              </button>
-              <button
-                onClick={() => remove(m)}
-                className="p-2 bg-red-100 text-red-700 rounded-full hover:bg-red-200"
-                title="Eliminar"
-              >
-                <i className="fa-solid fa-trash"></i>
-              </button>
+            <div className="border border-gray-200 md:border-t-0 rounded-lg md:rounded-t-none overflow-hidden bg-white">
+              {loading ? (
+                <div className="px-4 py-6 text-center text-gray-500">A carregar materiais...</div>
+              ) : items.length === 0 ? (
+                <div className="px-4 py-6 text-center text-gray-500">Sem materiais registados.</div>
+              ) : (
+                items.map((m) => (
+                  <div
+                    key={m._id}
+                    className="
+                      border-t border-gray-200 first:border-t-0
+                      md:grid md:grid-cols-[320px_160px_160px_140px_90px_150px_90px_120px]
+                      md:items-center
+                      p-4 md:p-0
+                    "
+                  >
+                    <div className="md:hidden space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">{m?.nome || '—'}</div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Marca:</span> {m?.marca || '—'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Categoria:</span> {m?.categoria || '—'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Ref:</span> {m?.referencia || '—'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Unid:</span> {m?.unidade || 'un'} •{' '}
+                            <span className="font-medium">Preço:</span>{' '}
+                            {m?.precoVenda != null ? `${Number(m.precoVenda).toFixed(2)} €` : '—'} •{' '}
+                            <span className="font-medium">Stock:</span> {m?.stockAtual ?? 0}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => openEdit(m)}
+                            className="p-2 bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200"
+                            title="Editar"
+                          >
+                            <i className="fa-solid fa-pen"></i>
+                          </button>
+                          <button
+                            onClick={() => remove(m)}
+                            className="p-2 bg-red-100 text-red-700 rounded-full hover:bg-red-200"
+                            title="Eliminar"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="hidden md:block px-4 py-4 font-medium text-gray-900 truncate">{m?.nome || '—'}</div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.marca || '—'}</div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.categoria || '—'}</div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700 truncate">{m?.referencia || '—'}</div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700">{m?.unidade || 'un'}</div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700">
+                      {m?.precoVenda != null ? `${Number(m.precoVenda).toFixed(2)} €` : '—'}
+                    </div>
+                    <div className="hidden md:block px-4 py-4 text-gray-700">{m?.stockAtual ?? 0}</div>
+                    <div className="hidden md:block px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEdit(m)}
+                          className="p-2 bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200"
+                          title="Editar"
+                        >
+                          <i className="fa-solid fa-pen"></i>
+                        </button>
+                        <button
+                          onClick={() => remove(m)}
+                          className="p-2 bg-red-100 text-red-700 rounded-full hover:bg-red-200"
+                          title="Eliminar"
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
-      ))
-    )}
-  </div>
-</div>
-
-
+      </div>
 
       {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-gray-900">
-                {editing ? 'Editar Material' : 'Novo Material'}
-              </h4>
+              <h4 className="text-lg font-semibold text-gray-900">{editing ? 'Editar Material' : 'Novo Material'}</h4>
               <button
                 onClick={() => !saving && setModalOpen(false)}
                 className="text-gray-500 hover:text-gray-700"

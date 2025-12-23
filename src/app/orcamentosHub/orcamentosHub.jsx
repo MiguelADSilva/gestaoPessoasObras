@@ -1,7 +1,9 @@
 'use client';
 import React from 'react';
+import OrcamentoBuilder from '../orcamentoBuilder/orcamentoBuilder'; // ajusta se necessário
 
 export default function OrcamentosHub({ onBack }) {
+  const [view, setView] = React.useState('list'); // 'list' | 'builder'
   const [obras, setObras] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -10,11 +12,7 @@ export default function OrcamentosHub({ onBack }) {
   const getToken = () => {
     try {
       if (typeof window === 'undefined') return null;
-      return (
-        localStorage.getItem('token') ||
-        sessionStorage.getItem('token') ||
-        null
-      );
+      return localStorage.getItem('token') || sessionStorage.getItem('token') || null;
     } catch {
       return null;
     }
@@ -35,12 +33,7 @@ export default function OrcamentosHub({ onBack }) {
     try {
       const token = getToken();
 
-      // tenta alguns endpoints comuns (como já fizeste noutros lados)
-      const tryUrls = [
-        '/api/obras?limit=1000',
-        '/api/obras',
-      ];
-
+      const tryUrls = ['/api/obras?limit=1000', '/api/obras'];
       let okData = null;
 
       for (const url of tryUrls) {
@@ -48,7 +41,6 @@ export default function OrcamentosHub({ onBack }) {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           cache: 'no-store',
         });
-
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           okData = data;
@@ -58,7 +50,7 @@ export default function OrcamentosHub({ onBack }) {
 
       if (!okData) throw new Error('Não foi possível carregar as obras.');
 
-      const lista = Array.isArray(okData) ? okData : (okData?.obras || okData?.items || []);
+      const lista = Array.isArray(okData) ? okData : okData?.obras || okData?.items || [];
       const normalizadas = (Array.isArray(lista) ? lista : [])
         .map((o) => ({ ...o, _id: getObraId(o) }))
         .filter((o) => !!o._id);
@@ -73,39 +65,104 @@ export default function OrcamentosHub({ onBack }) {
   }, []);
 
   React.useEffect(() => {
-    fetchObras();
-  }, [fetchObras]);
+    if (view === 'list') fetchObras();
+  }, [fetchObras, view]);
 
+  // ✅ ABRIR BUILDER SEM OBRA
   const openOrcamentoSemObra = () => {
     setSelectedObra(null);
-    // aqui depois ligamos ao "builder" do orçamento sem obra
-    // por agora só deixa selecionado null e mostramos badge
+    setView('builder');
   };
 
+  // ✅ ABRIR BUILDER COM OBRA
+  const openOrcamentoComObra = (obra) => {
+    setSelectedObra(obra);
+    setView('builder');
+  };
+
+  const deleteObra = async (obra) => {
+    const id = obra?._id;
+    if (!id) return;
+
+    if (!confirm(`Eliminar a obra "${obra?.nome || 'Sem nome'}" definitivamente?`)) return;
+
+    setError('');
+    try {
+      const token = getToken();
+
+      const res = await fetch(`/api/obras/${id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Erro ao eliminar a obra.');
+
+      setSelectedObra((prev) => (prev?._id === id ? null : prev));
+      await fetchObras();
+    } catch (e) {
+      setError(e?.message || 'Erro ao eliminar a obra.');
+    }
+  };
+
+  // ==========================
+  // VIEW: BUILDER
+  // ==========================
+  if (view === 'builder') {
+    return (
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 truncate">
+              {selectedObra ? `Orçamento para: ${selectedObra?.nome || 'Obra'}` : 'Orçamento (obra não guardada)'}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {selectedObra
+                ? 'Builder associado à obra selecionada.'
+                : 'Builder de orçamento avulso (sem obra).'}
+            </p>
+
+            <div className="mt-2">
+              {selectedObra ? (
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-blue-50 text-blue-800">
+                  <i className="fa-solid fa-briefcase"></i>
+                  Orçamento para: <b className="font-semibold">{selectedObra?.nome || 'Obra'}</b>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
+                  <i className="fa-solid fa-file-circle-plus"></i>
+                  Orçamento para obra não guardada
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setView('list')}
+            className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            Voltar
+          </button>
+        </div>
+
+        <div className="mt-6">
+          {/* ✅ PASSA A OBRA (ou null) para o teu builder */}
+          <OrcamentoBuilder obra={selectedObra} />
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================
+  // VIEW: LISTA DE OBRAS
+  // ==========================
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Criar Orçamentos</h3>
-          <p className="text-sm text-gray-600">
-            Escolhe uma obra (ou cria um orçamento sem obra).
-          </p>
-
-          {/* Badge de seleção */}
-          <div className="mt-2">
-            {selectedObra ? (
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-blue-50 text-blue-800">
-                <i className="fa-solid fa-briefcase"></i>
-                Orçamento para: <b className="font-semibold">{selectedObra?.nome || 'Obra'}</b>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
-                <i className="fa-solid fa-file-circle-plus"></i>
-                Orçamento para obra não guardada
-              </span>
-            )}
-          </div>
+          <p className="text-sm text-gray-600">Escolhe uma obra (ou cria um orçamento sem obra).</p>
         </div>
 
         {/* Botões à direita */}
@@ -117,7 +174,6 @@ export default function OrcamentosHub({ onBack }) {
             Voltar
           </button>
 
-          {/* O botão que pediste no canto superior direito */}
           <button
             onClick={openOrcamentoSemObra}
             className="px-4 py-2 rounded-md bg-gray-900 text-white hover:bg-gray-800 transition"
@@ -154,39 +210,27 @@ export default function OrcamentosHub({ onBack }) {
         {/* Grid de cards */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {loading ? (
-            <div className="col-span-full text-gray-500 text-sm py-6">
-              A carregar obras...
-            </div>
+            <div className="col-span-full text-gray-500 text-sm py-6">A carregar obras...</div>
           ) : obras.length === 0 ? (
-            <div className="col-span-full text-gray-500 text-sm py-6">
-              Sem obras registadas.
-            </div>
+            <div className="col-span-full text-gray-500 text-sm py-6">Sem obras registadas.</div>
           ) : (
             obras.map((o) => (
               <ObraCard
                 key={o._id}
                 obra={o}
-                selected={selectedObra?._id === o._id}
-                onClick={() => setSelectedObra(o)}
+                onClick={() => openOrcamentoComObra(o)}   // ✅ AGORA ABRE O BUILDER
+                onDelete={() => deleteObra(o)}
               />
             ))
           )}
         </div>
       </div>
-
-      {/* Placeholder do próximo passo */}
-      <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-600">
-        Próximo passo: abrir o “builder” do orçamento (linhas, quantidades, margem, IVA, export PDF).
-        <br />
-        Quando clicares numa obra, vamos criar o orçamento já associado a essa obra.
-      </div>
     </div>
   );
 }
 
-function ObraCard({ obra, selected, onClick }) {
-  const estado = (obra?.estadoObra || obra?.estado || '').toString().toLowerCase();
-  const estadoLabel = estado || '—';
+function ObraCard({ obra, onClick, onDelete }) {
+  const estado = (obra?.estadoObra || obra?.estado || '').toLowerCase();
 
   const estadoClass =
     estado === 'andamento'
@@ -198,20 +242,25 @@ function ObraCard({ obra, selected, onClick }) {
       : 'bg-yellow-100 text-yellow-800';
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
       className={[
-        'relative overflow-hidden text-left bg-white rounded-xl shadow-md p-5',
+        'relative cursor-pointer overflow-hidden bg-white rounded-xl shadow-md p-5 w-full',
         'transition-transform duration-200 ease-out',
         'hover:-translate-y-1 hover:shadow-xl hover:scale-[1.01]',
         'ring-1 ring-transparent hover:ring-2 hover:ring-blue-200',
-        selected ? 'ring-2 ring-blue-400' : '',
-        'before:content-[""] before:absolute before:inset-0 before:bg-gradient-to-r',
-        'before:from-blue-200/30 before:to-transparent',
-        'before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-200',
+        // 🔵 EFEITO AZUL
+        'before:content-[""] before:absolute before:inset-0',
+        'before:bg-gradient-to-r before:from-blue-200/30 before:to-transparent',
+        'before:opacity-0 hover:before:opacity-100',
+        'before:transition-opacity before:duration-200',
+        'select-none',
       ].join(' ')}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative z-10 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h5 className="text-base font-semibold text-gray-900 truncate">
             {obra?.nome || 'Sem nome'}
@@ -219,36 +268,52 @@ function ObraCard({ obra, selected, onClick }) {
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className={`px-2 py-1 rounded-full text-xs capitalize ${estadoClass}`}>
-              {estadoLabel}
+              {estado || '—'}
             </span>
 
-            {obra?.localizacao ? (
+            {obra?.localizacao && (
               <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
                 <i className="fa-solid fa-location-dot mr-1 opacity-70"></i>
                 {obra.localizacao}
               </span>
-            ) : null}
+            )}
           </div>
 
           <div className="mt-3 text-sm text-gray-600">
             <span className="font-medium">Tipo:</span> {obra?.tipoObra || '—'}
-            {obra?.numeroCasas != null ? (
+            {obra?.numeroCasas != null && (
               <>
                 {' '}
                 • <span className="font-medium">Casas:</span> {obra.numeroCasas}
               </>
-            ) : null}
+            )}
           </div>
         </div>
 
-        <div className="shrink-0 text-blue-600">
-          <i className="fa-solid fa-arrow-right-long opacity-80"></i>
+        {/* AÇÕES */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation(); // 🔥 não ativa o card
+              onDelete?.();
+            }}
+            className="p-2 rounded-full bg-red-100 text-red-700 hover:bg-red-200"
+            title="Eliminar obra"
+          >
+            <i className="fa-solid fa-trash"></i>
+          </button>
+
+          <span className="text-blue-600">
+            <i className="fa-solid fa-arrow-right-long opacity-70"></i>
+          </span>
         </div>
       </div>
 
-      <div className="mt-4 text-xs text-gray-500">
-        Clique para criar orçamento para esta obra
+      <div className="relative z-10 mt-4 text-xs text-gray-500">
+        Clique no cartão para criar orçamento para esta obra
       </div>
-    </button>
+    </div>
   );
 }
