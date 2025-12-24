@@ -8,6 +8,11 @@ export default function VerOrcamentos({ onBack }) {
   const [q, setQ] = React.useState('');
   const [selected, setSelected] = React.useState(null);
 
+  // ✅ NOVO: email
+  const [emailTo, setEmailTo] = React.useState('');
+  const [sendingEmail, setSendingEmail] = React.useState(false);
+  const [emailMsg, setEmailMsg] = React.useState('');
+
   const getId = (o) => o?._id || o?.id || null;
 
   const fetchOrcamentos = React.useCallback(async () => {
@@ -79,6 +84,51 @@ export default function VerOrcamentos({ onBack }) {
       await fetchOrcamentos();
     } catch (e) {
       setError(e?.message || 'Erro ao eliminar orçamento.');
+    }
+  };
+
+  // ✅ NOVO: quando selecionas orçamento, pré-preenche email com contacto do cliente (se existir)
+  React.useEffect(() => {
+    if (!selected) {
+      setEmailTo('');
+      setEmailMsg('');
+      return;
+    }
+    setEmailTo(selected?.clienteEmail || selected?.email || selected?.clienteContactoEmail || '');
+    setEmailMsg('');
+  }, [selected]);
+
+  // ✅ NOVO: enviar por email
+  const sendEmail = async () => {
+    const id = getId(selected);
+    if (!id) return;
+
+    const to = (emailTo || '').trim();
+    if (!to) {
+      setEmailMsg('Indica um email de destino.');
+      return;
+    }
+
+    setSendingEmail(true);
+    setEmailMsg('');
+    setError('');
+
+    try {
+      const res = await fetch(`/api/orcamentos/${id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Erro ao enviar email.');
+
+      setEmailMsg('✅ Email enviado com sucesso.');
+    } catch (e) {
+      setEmailMsg('');
+      setError(e?.message || 'Erro ao enviar email.');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -167,7 +217,6 @@ export default function VerOrcamentos({ onBack }) {
                       'hover:-translate-y-1 hover:shadow-xl hover:scale-[1.01]',
                       'ring-1 ring-transparent hover:ring-2 hover:ring-purple-200',
                       isSelected ? 'ring-2 ring-purple-400' : '',
-                      // shine roxo
                       'before:content-[""] before:absolute before:inset-0',
                       'before:bg-gradient-to-r before:from-purple-200/30 before:to-transparent',
                       'before:opacity-0 hover:before:opacity-100',
@@ -253,7 +302,7 @@ export default function VerOrcamentos({ onBack }) {
                 Seleciona um orçamento para ver os detalhes.
               </div>
             ) : (
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 space-y-4">
                 <div>
                   <div className="text-xs text-gray-500">Título</div>
                   <div className="font-medium text-gray-900">{selected?.titulo || '—'}</div>
@@ -281,6 +330,37 @@ export default function VerOrcamentos({ onBack }) {
                   <MiniStat label="IVA" value={fmtMoney(selected?.totalIva || selected?.totals?.iva)} />
                   <MiniStat label="Total" value={fmtMoney(selected?.total || selected?.totals?.total)} />
                   <MiniStat label="Linhas" value={String((selected?.linhas || []).length)} />
+                </div>
+
+                {/* ✅ NOVO: Enviar por Email */}
+                <div className="pt-2">
+                  <div className="text-xs text-gray-500 mb-2">Enviar por email</div>
+
+                  <div className="flex flex-col gap-2">
+                    <input
+                      value={emailTo}
+                      onChange={(e) => setEmailTo(e.target.value)}
+                      placeholder="ex: cliente@email.com"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={sendEmail}
+                      disabled={sendingEmail}
+                      className={`w-full px-4 py-2 rounded-md text-white ${
+                        sendingEmail ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
+                      }`}
+                    >
+                      {sendingEmail ? 'A enviar...' : 'Enviar Orçamento'}
+                    </button>
+
+                    {emailMsg ? (
+                      <div className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-md p-2">
+                        {emailMsg}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="pt-2">

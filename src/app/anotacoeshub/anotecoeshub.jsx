@@ -493,150 +493,165 @@ function MaterialsManager({ onBack }) {
       </div>
 
       {/* Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-gray-900">{editing ? 'Editar Material' : 'Novo Material'}</h4>
-              <button
-                onClick={() => !saving && setModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Fechar"
-                title="Fechar"
+      {/* Modal */}
+{modalOpen && (
+  <div className="fixed inset-0 z-40 bg-black/30 overflow-y-auto">
+    <div className="flex min-h-full items-start justify-center p-4">
+
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90dvh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b">
+          <h4 className="text-lg font-semibold text-gray-900">
+            {editing ? 'Editar Material' : 'Novo Material'}
+          </h4>
+
+          <button
+            onClick={() => !saving && setModalOpen(false)}
+            className="text-gray-500 hover:text-gray-700"
+            aria-label="Fechar"
+          >
+            <i className="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        {/* Body (scrollável) */}
+        <div className="p-6 overflow-y-auto flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <Field label="Nome *">
+              <input
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Categoria">
+              <input
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                placeholder="cabos, disjuntores..."
+                value={form.categoria}
+                onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Marca">
+              <input
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.marca}
+                onChange={(e) => setForm({ ...form, marca: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Referência">
+              <input
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.referencia}
+                onChange={(e) => setForm({ ...form, referencia: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Unidade">
+              <select
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.unidade}
+                onChange={(e) => setForm({ ...form, unidade: e.target.value })}
               >
-                <i className="fa-solid fa-xmark text-lg"></i>
-              </button>
+                <option value="un">un</option>
+                <option value="m">m</option>
+                <option value="rolo">rolo</option>
+                <option value="cx">cx</option>
+                <option value="kg">kg</option>
+                <option value="pack">pack</option>
+              </select>
+            </Field>
+
+            <Field label="IVA (%)">
+              <input
+                type="number"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.iva}
+                onChange={(e) => setForm({ ...form, iva: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Preço Compra">
+              <input
+                type="number"
+                step="0.01"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.precoCompra}
+                onChange={(e) => setForm({ ...form, precoCompra: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Preço Venda">
+              <input
+                type="number"
+                step="0.01"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.precoVenda}
+                onChange={(e) => setForm({ ...form, precoVenda: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Stock Atual">
+              <input
+                type="number"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.stockAtual}
+                onChange={(e) => setForm({ ...form, stockAtual: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Fornecedor">
+              <input
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                value={form.fornecedor}
+                onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
+              />
+            </Field>
+
+            <div className="md:col-span-2">
+              <Field label="Notas">
+                <textarea
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                  value={form.notas}
+                  onChange={(e) => setForm({ ...form, notas: e.target.value })}
+                />
+              </Field>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Nome *">
-                <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Categoria">
-                <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="cabos, disjuntores..."
-                  value={form.categoria}
-                  onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Marca">
-                <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.marca}
-                  onChange={(e) => setForm({ ...form, marca: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Referência">
-                <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.referencia}
-                  onChange={(e) => setForm({ ...form, referencia: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Unidade">
-                <select
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.unidade}
-                  onChange={(e) => setForm({ ...form, unidade: e.target.value })}
-                >
-                  <option value="un">un</option>
-                  <option value="m">m</option>
-                  <option value="rolo">rolo</option>
-                  <option value="cx">cx</option>
-                  <option value="kg">kg</option>
-                  <option value="pack">pack</option>
-                </select>
-              </Field>
-
-              <Field label="IVA (%)">
-                <input
-                  type="number"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.iva}
-                  onChange={(e) => setForm({ ...form, iva: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Preço Compra">
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.precoCompra}
-                  onChange={(e) => setForm({ ...form, precoCompra: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Preço Venda">
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.precoVenda}
-                  onChange={(e) => setForm({ ...form, precoVenda: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Stock Atual">
-                <input
-                  type="number"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.stockAtual}
-                  onChange={(e) => setForm({ ...form, stockAtual: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Fornecedor">
-                <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                  value={form.fornecedor}
-                  onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
-                />
-              </Field>
-
-              <div className="md:col-span-2">
-                <Field label="Notas">
-                  <textarea
-                    rows={3}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                    value={form.notas}
-                    onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                  />
-                </Field>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => !saving && setModalOpen(false)}
-                className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-                disabled={saving}
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={submit}
-                className={`px-4 py-2 rounded-md text-white ${
-                  saving ? 'bg-orange-400' : 'bg-orange-600 hover:bg-orange-700'
-                }`}
-                disabled={saving}
-              >
-                {saving ? 'A guardar...' : 'Guardar'}
-              </button>
-            </div>
           </div>
         </div>
-      )}
+
+        {/* Footer */}
+        <div className="p-6 border-t flex justify-end gap-3">
+          <button
+            onClick={() => !saving && setModalOpen(false)}
+            className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            disabled={saving}
+          >
+            Cancelar
+          </button>
+
+          <button
+            onClick={submit}
+            className={`px-4 py-2 rounded-md text-white ${
+              saving ? 'bg-orange-400' : 'bg-orange-600 hover:bg-orange-700'
+            }`}
+            disabled={saving}
+          >
+            {saving ? 'A guardar...' : 'Guardar'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
