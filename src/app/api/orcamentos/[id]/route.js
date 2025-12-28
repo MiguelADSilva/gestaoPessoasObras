@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Orcamento from '@/models/Orcamento';
 import dbConnect from '@/lib/mongoose';
+import { connectToDatabase } from "@/app/api/lib/database";
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
