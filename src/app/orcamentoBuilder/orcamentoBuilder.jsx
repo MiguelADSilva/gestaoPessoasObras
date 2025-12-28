@@ -1,24 +1,54 @@
 'use client';
 import React from 'react';
 
+/**
+ * OrcamentoBuilder (novo + editar)
+ * - Suporta: criar / editar (PUT) com orcamentoId ou initialOrcamento
+ * - Suporta descontoPercent (guarda e recalcula total)
+ * - ✅ Suporta checkbox "Empresa com autoliquidação" -> IVA = 0 e Total = Subtotal (antes do desconto)
+ *
+ * NOTA IMPORTANTE (erro 405):
+ * Este componente faz fetch para /api/orcamentos e /api/orcamentos/:id
+ * Confirma que tens as rotas API aqui:
+ *   /app/api/orcamentos/route.js            (GET, POST)
+ *   /app/api/orcamentos/[id]/route.js      (GET, PUT, DELETE)
+ */
+
 export default function OrcamentoBuilder({
   obra = null,
   onBack,
-  orcamentoId = null, // ✅ passa este id quando queres editar
-  initialOrcamento = null, // ✅ ou passa o objeto orçamento (opcional)
+  orcamentoId = null,
+  initialOrcamento = null,
+  apiBase = '/api/orcamentos', // se o teu endpoint for diferente, muda aqui
 }) {
   const [orcId, setOrcId] = React.useState(
     orcamentoId || initialOrcamento?._id || initialOrcamento?.id || null
   );
+
   const [saving, setSaving] = React.useState(false);
+  const [loadingOrc, setLoadingOrc] = React.useState(false);
   const [error, setError] = React.useState('');
 
-  const makeRowId = () =>
-    (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  // Cabeçalho / cliente / opções
+  const [meta, setMeta] = React.useState({
+    titulo: obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)',
+    clienteNome: '',
+    clienteContacto: '',
+    notas: '',
+    descontoPercent: 0,
+    autoliquidacao: false, // ✅ NOVO
+  });
+
+  function newRowId() {
+    return (
+      (globalThis.crypto?.randomUUID && globalThis.crypto.randomUUID()) ||
+      String(Date.now() + Math.random())
+    );
+  }
 
   function novaLinhaVazia() {
     return {
-      id: makeRowId(),
+      id: newRowId(),
       materialId: null,
       descricao: '',
       unidade: 'un',
@@ -27,15 +57,6 @@ export default function OrcamentoBuilder({
       iva: 23,
     };
   }
-
-  // Cabeçalho / cliente
-  const [meta, setMeta] = React.useState({
-    titulo: obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)',
-    clienteNome: '',
-    clienteContacto: '',
-    notas: '',
-    descontoPercent: 0,
-  });
 
   // Linhas
   const [linhas, setLinhas] = React.useState([novaLinhaVazia()]);
@@ -47,39 +68,64 @@ export default function OrcamentoBuilder({
   const [matQ, setMatQ] = React.useState('');
   const [materiais, setMateriais] = React.useState([]);
 
-  // ✅ Carregar orçamento para edição (via id ou initialOrcamento)
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  const toNum = (v, fallback = 0) => {
+    const n = Number(String(v ?? '').replace(',', '.'));
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const money = (n) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '—';
+    return `${v.toFixed(2)} €`;
+  };
+
+  // ---------------------------
+  // Hydrate (editar)
+  // ---------------------------
   React.useEffect(() => {
     let ignore = false;
 
     const hydrate = (orc) => {
       const tituloDefault = obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)';
 
-      const descontoPercent = Number(
+      const descontoPercent = toNum(
         orc?.descontoPercent ??
           orc?.descontoPct ??
           orc?.descontoPerc ??
           orc?.discountPercent ??
-          0
+          0,
+        0
+      );
+
+      const autoliquidacao = !!(
+        orc?.autoliquidacao ??
+        orc?.autoLiquidacao ??
+        orc?.empresaAutoliquidacao ??
+        false
       );
 
       setMeta({
-        titulo: (orc?.titulo || tituloDefault),
-        clienteNome: (orc?.clienteNome || ''),
-        clienteContacto: (orc?.clienteContacto || ''),
-        notas: (orc?.notas || ''),
+        titulo: orc?.titulo || tituloDefault,
+        clienteNome: orc?.clienteNome || '',
+        clienteContacto: orc?.clienteContacto || '',
+        notas: orc?.notas || '',
         descontoPercent: Number.isFinite(descontoPercent) ? descontoPercent : 0,
+        autoliquidacao,
       });
 
       const ls = Array.isArray(orc?.linhas) ? orc.linhas : [];
       const linhasHidratadas = ls.length
         ? ls.map((l) => ({
-            id: makeRowId(),
+            id: newRowId(),
             materialId: l?.materialId || null,
             descricao: l?.descricao || '',
             unidade: l?.unidade || 'un',
-            quantidade: Number(l?.quantidade ?? 0),
-            precoUnitario: Number(l?.precoUnitario ?? l?.precoUnit ?? 0),
-            iva: Number(l?.iva ?? 23),
+            quantidade: toNum(l?.quantidade, 0),
+            precoUnitario: toNum(l?.precoUnitario ?? l?.precoUnit, 0),
+            iva: autoliquidacao ? 0 : toNum(l?.iva ?? 23, 23),
           }))
         : [novaLinhaVazia()];
 
@@ -87,9 +133,10 @@ export default function OrcamentoBuilder({
     };
 
     async function loadById(id) {
+      setLoadingOrc(true);
+      setError('');
       try {
-        setError('');
-        const res = await fetch(`/api/orcamentos/${id}`, { cache: 'no-store' });
+        const res = await fetch(`${apiBase}/${id}`, { cache: 'no-store' });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data) throw new Error(data?.error || 'Erro ao carregar orçamento.');
 
@@ -97,12 +144,12 @@ export default function OrcamentoBuilder({
         setOrcId(data?._id || data?.id || id);
         hydrate(data);
       } catch (e) {
-        if (ignore) return;
-        setError(e?.message || 'Erro ao carregar orçamento.');
+        if (!ignore) setError(e?.message || 'Erro ao carregar orçamento.');
+      } finally {
+        if (!ignore) setLoadingOrc(false);
       }
     }
 
-    // prioridade: initialOrcamento
     if (initialOrcamento) {
       hydrate(initialOrcamento);
       const id = initialOrcamento?._id || initialOrcamento?.id || null;
@@ -112,47 +159,65 @@ export default function OrcamentoBuilder({
       };
     }
 
-    // senão: orcamentoId
-    if (orcamentoId) {
-      loadById(orcamentoId);
-    }
+    if (orcamentoId) loadById(orcamentoId);
 
     return () => {
       ignore = true;
     };
-  }, [orcamentoId, initialOrcamento, obra]);
+  }, [orcamentoId, initialOrcamento, obra, apiBase]);
 
+  // ---------------------------
+  // Regras autoliquidação
+  // - se activar: forçar IVA=0 nas linhas
+  // ---------------------------
+  React.useEffect(() => {
+    if (!meta.autoliquidacao) return;
+    setLinhas((prev) => prev.map((l) => ({ ...l, iva: 0 })));
+  }, [meta.autoliquidacao]);
+
+  // ---------------------------
+  // Totais
+  // ---------------------------
   const subtotal = React.useMemo(() => {
-    return linhas.reduce(
-      (acc, l) => acc + (Number(l.quantidade) || 0) * (Number(l.precoUnitario) || 0),
-      0
-    );
+    return linhas.reduce((acc, l) => acc + toNum(l.quantidade, 0) * toNum(l.precoUnitario, 0), 0);
   }, [linhas]);
 
   const totalIva = React.useMemo(() => {
+    if (meta.autoliquidacao) return 0; // ✅ IVA 0
     return linhas.reduce((acc, l) => {
-      const base = (Number(l.quantidade) || 0) * (Number(l.precoUnitario) || 0);
-      const iva = Number(l.iva) || 0;
+      const base = toNum(l.quantidade, 0) * toNum(l.precoUnitario, 0);
+      const iva = toNum(l.iva, 0);
       return acc + base * (iva / 100);
     }, 0);
-  }, [linhas]);
+  }, [linhas, meta.autoliquidacao]);
+
+  const totalAntesDesconto = React.useMemo(() => subtotal + totalIva, [subtotal, totalIva]);
 
   const descontoValor = React.useMemo(() => {
-    const p = Number(meta.descontoPercent) || 0;
-    return (subtotal + totalIva) * (p / 100);
-  }, [meta.descontoPercent, subtotal, totalIva]);
+    const p = toNum(meta.descontoPercent, 0);
+    return totalAntesDesconto * (p / 100);
+  }, [meta.descontoPercent, totalAntesDesconto]);
 
   const total = React.useMemo(() => {
-    return subtotal + totalIva - descontoValor;
-  }, [subtotal, totalIva, descontoValor]);
+    const v = totalAntesDesconto - descontoValor;
+    return v < 0 ? 0 : v;
+  }, [totalAntesDesconto, descontoValor]);
 
+  // ---------------------------
+  // Linhas CRUD
+  // ---------------------------
   const setLinha = (id, patch) => {
-    setLinhas((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    setLinhas((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
+    );
   };
 
   const addLinha = () => setLinhas((prev) => [...prev, novaLinhaVazia()]);
   const removeLinha = (id) => setLinhas((prev) => prev.filter((l) => l.id !== id));
 
+  // ---------------------------
+  // Materiais
+  // ---------------------------
   const fetchMateriais = React.useCallback(async () => {
     setMatLoading(true);
     setMatError('');
@@ -164,6 +229,7 @@ export default function OrcamentoBuilder({
       const res = await fetch(`/api/materiais?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Erro ao carregar materiais.');
+
       setMateriais(Array.isArray(data?.items) ? data.items : []);
     } catch (e) {
       setMateriais([]);
@@ -185,27 +251,26 @@ export default function OrcamentoBuilder({
       descricao: [m?.nome, m?.marca].filter(Boolean).join(' - ') || m?.nome || '',
       unidade: m?.unidade || 'un',
       quantidade: 1,
-      precoUnitario: Number(m?.precoVenda ?? 0),
-      iva: Number(m?.iva ?? 23),
+      precoUnitario: toNum(m?.precoVenda ?? 0, 0),
+      iva: meta.autoliquidacao ? 0 : toNum(m?.iva ?? 23, 23),
     };
     setLinhas((prev) => [...prev, linha]);
     setMatModal(false);
   };
 
-  const guardarRascunho = async () => {
+  // ---------------------------
+  // Guardar (POST/PUT)
+  // ---------------------------
+  const guardar = async () => {
     setSaving(true);
     setError('');
 
     try {
-      // ✅ normaliza linhas (sem NaN)
-      const linhasNormalizadas = linhas.map((l) => {
-        const q = Number(l.quantidade);
-        const pu = Number(l.precoUnitario);
-        const iv = Number(l.iva);
-
-        const quantidade = Number.isFinite(q) ? q : 0;
-        const precoUnitario = Number.isFinite(pu) ? pu : 0;
-        const iva = Number.isFinite(iv) ? iv : 0;
+      // normaliza linhas
+      const linhasNormalizadas = (linhas || []).map((l) => {
+        const quantidade = toNum(l.quantidade, 0);
+        const precoUnitario = toNum(l.precoUnitario, 0);
+        const ivaPct = meta.autoliquidacao ? 0 : toNum(l.iva, 0);
 
         const totalLinha = quantidade * precoUnitario;
 
@@ -215,27 +280,28 @@ export default function OrcamentoBuilder({
           unidade: (l.unidade || 'un').trim(),
           quantidade,
           precoUnitario,
-          iva,
+          iva: ivaPct,
           totalLinha: Number.isFinite(totalLinha) ? totalLinha : 0,
         };
       });
 
+      // recalcula totals finais (server deve validar também)
       const subtotalCalc = linhasNormalizadas.reduce(
-        (acc, l) => acc + Number(l.quantidade) * Number(l.precoUnitario),
+        (acc, l) => acc + toNum(l.quantidade, 0) * toNum(l.precoUnitario, 0),
         0
       );
 
-      const totalIvaCalc = linhasNormalizadas.reduce((acc, l) => {
-        const base = Number(l.quantidade) * Number(l.precoUnitario);
-        return acc + base * ((Number(l.iva) || 0) / 100);
-      }, 0);
+      const ivaCalc = meta.autoliquidacao
+        ? 0
+        : linhasNormalizadas.reduce((acc, l) => {
+            const base = toNum(l.quantidade, 0) * toNum(l.precoUnitario, 0);
+            return acc + base * (toNum(l.iva, 0) / 100);
+          }, 0);
 
-      const descontoP = Number(meta.descontoPercent);
-      const descontoPercent = Number.isFinite(descontoP) ? descontoP : 0;
-
-      const totalAntesDesconto = subtotalCalc + totalIvaCalc;
-      const descontoValorCalc = totalAntesDesconto * (descontoPercent / 100);
-      const totalCalc = totalAntesDesconto - descontoValorCalc;
+      const totalAntes = subtotalCalc + ivaCalc;
+      const descontoPercent = toNum(meta.descontoPercent, 0);
+      const descontoVal = totalAntes * (descontoPercent / 100);
+      const totalCalc = Math.max(0, totalAntes - descontoVal);
 
       const payload = {
         obraId: obra?._id || obra?.id || null,
@@ -246,18 +312,21 @@ export default function OrcamentoBuilder({
         clienteContacto: (meta.clienteContacto || '').trim(),
         notas: (meta.notas || '').trim(),
 
+        // ✅ guarda isto no documento
         descontoPercent,
+        autoliquidacao: !!meta.autoliquidacao,
+
         estado: 'rascunho',
 
         linhas: linhasNormalizadas,
 
         subtotal: Number.isFinite(subtotalCalc) ? subtotalCalc : 0,
-        totalIva: Number.isFinite(totalIvaCalc) ? totalIvaCalc : 0,
+        totalIva: Number.isFinite(ivaCalc) ? ivaCalc : 0,
         total: Number.isFinite(totalCalc) ? totalCalc : 0,
       };
 
       const isEdit = !!orcId;
-      const url = isEdit ? `/api/orcamentos/${orcId}` : `/api/orcamentos`;
+      const url = isEdit ? `${apiBase}/${orcId}` : `${apiBase}`;
       const method = isEdit ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -278,6 +347,9 @@ export default function OrcamentoBuilder({
     }
   };
 
+  // ---------------------------
+  // UI
+  // ---------------------------
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       {/* Header */}
@@ -286,13 +358,19 @@ export default function OrcamentoBuilder({
           <h3 className="text-lg font-semibold text-gray-900 truncate">
             {obra ? `Orçamento para: ${obra?.nome || 'Obra'}` : 'Orçamento sem obra'}
           </h3>
+
           <p className="text-sm text-gray-600">
-            {orcId ? `A editar (#${String(orcId).slice(-6)})` : 'Novo orçamento'}
+            {loadingOrc
+              ? 'A carregar orçamento...'
+              : orcId
+              ? `A editar (#${String(orcId).slice(-6)})`
+              : 'Novo orçamento'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={onBack}
             className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
@@ -300,6 +378,7 @@ export default function OrcamentoBuilder({
           </button>
 
           <button
+            type="button"
             onClick={() => setMatModal(true)}
             className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
@@ -307,6 +386,7 @@ export default function OrcamentoBuilder({
           </button>
 
           <button
+            type="button"
             onClick={addLinha}
             className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
@@ -314,10 +394,11 @@ export default function OrcamentoBuilder({
           </button>
 
           <button
-            onClick={guardarRascunho}
-            disabled={saving}
+            type="button"
+            onClick={guardar}
+            disabled={saving || loadingOrc}
             className={`px-4 py-2 rounded-md text-white ${
-              saving ? 'bg-gray-400' : 'bg-gray-900 hover:bg-gray-800'
+              saving || loadingOrc ? 'bg-gray-400' : 'bg-gray-900 hover:bg-gray-800'
             }`}
           >
             {saving ? 'A guardar…' : 'Guardar'}
@@ -339,7 +420,7 @@ export default function OrcamentoBuilder({
           <input
             className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
             value={meta.titulo}
-            onChange={(e) => setMeta({ ...meta, titulo: e.target.value })}
+            onChange={(e) => setMeta((p) => ({ ...p, titulo: e.target.value }))}
           />
         </Field>
 
@@ -350,7 +431,7 @@ export default function OrcamentoBuilder({
             min="0"
             className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
             value={meta.descontoPercent}
-            onChange={(e) => setMeta({ ...meta, descontoPercent: e.target.value })}
+            onChange={(e) => setMeta((p) => ({ ...p, descontoPercent: e.target.value }))}
           />
         </Field>
 
@@ -358,7 +439,7 @@ export default function OrcamentoBuilder({
           <input
             className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
             value={meta.clienteNome}
-            onChange={(e) => setMeta({ ...meta, clienteNome: e.target.value })}
+            onChange={(e) => setMeta((p) => ({ ...p, clienteNome: e.target.value }))}
           />
         </Field>
 
@@ -366,9 +447,33 @@ export default function OrcamentoBuilder({
           <input
             className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
             value={meta.clienteContacto}
-            onChange={(e) => setMeta({ ...meta, clienteContacto: e.target.value })}
+            onChange={(e) => setMeta((p) => ({ ...p, clienteContacto: e.target.value }))}
           />
         </Field>
+
+        {/* ✅ Autoliquidação */}
+        <div className="md:col-span-2">
+          <label className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 bg-gray-50">
+            <input
+              type="checkbox"
+              checked={!!meta.autoliquidacao}
+              onChange={(e) =>
+                setMeta((p) => ({
+                  ...p,
+                  autoliquidacao: e.target.checked,
+                }))
+              }
+            />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-900">
+                Empresa com autoliquidação (IVA a 0%)
+              </div>
+              <div className="text-xs text-gray-600">
+                Se ativares, o IVA passa a 0% em todas as linhas e o total (antes do desconto) fica igual ao subtotal.
+              </div>
+            </div>
+          </label>
+        </div>
 
         <div className="md:col-span-2">
           <Field label="Notas">
@@ -376,7 +481,7 @@ export default function OrcamentoBuilder({
               rows={3}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               value={meta.notas}
-              onChange={(e) => setMeta({ ...meta, notas: e.target.value })}
+              onChange={(e) => setMeta((p) => ({ ...p, notas: e.target.value }))}
             />
           </Field>
         </div>
@@ -399,7 +504,13 @@ export default function OrcamentoBuilder({
 
           <tbody className="divide-y divide-gray-200">
             {linhas.map((l) => {
-              const lineTotal = (Number(l.quantidade) || 0) * (Number(l.precoUnitario) || 0);
+              const q = toNum(l.quantidade, 0);
+              const pu = toNum(l.precoUnitario, 0);
+              const lineBase = q * pu;
+              const ivaPct = meta.autoliquidacao ? 0 : toNum(l.iva, 0);
+              const lineIva = meta.autoliquidacao ? 0 : lineBase * (ivaPct / 100);
+              const lineTotal = lineBase + lineIva;
+
               return (
                 <tr key={l.id} className="align-middle">
                   <Td>
@@ -453,18 +564,27 @@ export default function OrcamentoBuilder({
                       type="number"
                       step="1"
                       min="0"
-                      className="w-full border border-gray-200 rounded-md px-2 py-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={l.iva}
+                      disabled={meta.autoliquidacao}
+                      className={`w-full border border-gray-200 rounded-md px-2 py-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        meta.autoliquidacao ? 'bg-gray-100 text-gray-500' : ''
+                      }`}
+                      value={meta.autoliquidacao ? 0 : l.iva}
                       onChange={(e) => setLinha(l.id, { iva: e.target.value })}
                     />
                   </Td>
 
                   <Td>
-                    <div className="text-sm font-medium text-gray-900">{lineTotal.toFixed(2)} €</div>
+                    <div className="text-sm font-medium text-gray-900">{money(lineTotal)}</div>
+                    {!meta.autoliquidacao && ivaPct ? (
+                      <div className="text-xs text-gray-500">
+                        Base: {money(lineBase)} • IVA: {money(lineIva)}
+                      </div>
+                    ) : null}
                   </Td>
 
                   <Td>
                     <button
+                      type="button"
                       onClick={() => removeLinha(l.id)}
                       className="inline-flex items-center justify-center w-10 h-10 rounded-md bg-red-100 text-red-700 hover:bg-red-200"
                       title="Remover linha"
@@ -489,19 +609,29 @@ export default function OrcamentoBuilder({
         <div className="rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">Subtotal</span>
-            <span className="font-medium text-gray-900">{subtotal.toFixed(2)} €</span>
+            <span className="font-medium text-gray-900">{money(subtotal)}</span>
           </div>
+
           <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="text-gray-600">IVA</span>
-            <span className="font-medium text-gray-900">{totalIva.toFixed(2)} €</span>
+            <span className="text-gray-600">
+              IVA {meta.autoliquidacao ? '(autoliquidação)' : ''}
+            </span>
+            <span className="font-medium text-gray-900">{money(totalIva)}</span>
           </div>
+
           <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="text-gray-600">Desconto</span>
-            <span className="font-medium text-gray-900">- {descontoValor.toFixed(2)} €</span>
+            <span className="text-gray-600">Total s/ desconto</span>
+            <span className="font-medium text-gray-900">{money(totalAntesDesconto)}</span>
           </div>
+
+          <div className="mt-2 flex items-center justify-between text-sm">
+            <span className="text-gray-600">Desconto ({toNum(meta.descontoPercent, 0).toFixed(2)}%)</span>
+            <span className="font-medium text-gray-900">- {money(descontoValor)}</span>
+          </div>
+
           <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
             <span className="font-semibold text-gray-900">Total</span>
-            <span className="font-semibold text-gray-900">{total.toFixed(2)} €</span>
+            <span className="font-semibold text-gray-900">{money(total)}</span>
           </div>
         </div>
       </div>
@@ -518,6 +648,7 @@ export default function OrcamentoBuilder({
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setMatModal(false)}
                 className="text-gray-500 hover:text-gray-700"
                 aria-label="Fechar"
@@ -536,6 +667,7 @@ export default function OrcamentoBuilder({
                 onKeyDown={(e) => e.key === 'Enter' && fetchMateriais()}
               />
               <button
+                type="button"
                 onClick={fetchMateriais}
                 className="px-4 py-2 rounded-md bg-gray-900 text-white hover:bg-gray-800"
               >
@@ -564,20 +696,24 @@ export default function OrcamentoBuilder({
                       Preço
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      IVA
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Ação
                     </th>
                   </tr>
                 </thead>
+
                 <tbody className="bg-white divide-y divide-gray-200">
                   {matLoading ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                      <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                         A carregar…
                       </td>
                     </tr>
                   ) : materiais.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                      <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                         Sem resultados.
                       </td>
                     </tr>
@@ -590,10 +726,14 @@ export default function OrcamentoBuilder({
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">{m?.referencia || '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {Number(m?.precoVenda ?? 0).toFixed(2)} €
+                          {money(toNum(m?.precoVenda ?? 0, 0))}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {meta.autoliquidacao ? '0%' : `${toNum(m?.iva ?? 23, 23)}%`}
                         </td>
                         <td className="px-4 py-3">
                           <button
+                            type="button"
                             onClick={() => addMaterialAsLinha(m)}
                             className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm"
                           >
@@ -609,6 +749,7 @@ export default function OrcamentoBuilder({
 
             <div className="mt-4 flex justify-end">
               <button
+                type="button"
                 onClick={() => setMatModal(false)}
                 className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
               >
@@ -622,7 +763,7 @@ export default function OrcamentoBuilder({
   );
 }
 
-/* Helpers */
+/* Helpers UI */
 function Th({ children, w }) {
   return (
     <th className={`px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase ${w || ''}`}>
