@@ -1,47 +1,44 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const LinhaOrcamentoSchema = new mongoose.Schema(
+const LinhaSchema = new mongoose.Schema(
   {
-    materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' }, // opcional
-    descricao: { type: String, required: true },
-    quantidade: { type: Number, required: true, min: 0 },
-    unidade: { type: String, default: 'un' },
-    precoUnitario: { type: Number, required: true, min: 0 },
-    iva: { type: Number, default: 23 }, // %
-    totalLinha: { type: Number, required: true },
+    materialId: { type: mongoose.Schema.Types.ObjectId, ref: "Material", default: null },
+    descricao: { type: String, default: "" },
+    unidade: { type: String, default: "un" },
+    quantidade: { type: Number, default: 0 },
+    precoUnitario: { type: Number, default: 0 },
+    iva: { type: Number, default: 23 },
+    totalLinha: { type: Number, default: 0 },
   },
   { _id: false }
 );
 
 const OrcamentoSchema = new mongoose.Schema(
   {
-    // ligação opcional à obra
-    obraId: { type: mongoose.Schema.Types.ObjectId, ref: 'Obra', default: null },
-    obraNomeSnapshot: { type: String }, // guarda o nome no momento
+    obraId: { type: mongoose.Schema.Types.ObjectId, ref: "Obra", default: null },
+    obraNomeSnapshot: { type: String, default: "" },
 
-    // dados do orçamento
-    titulo: { type: String, default: 'Orçamento' },
-    clienteNome: { type: String },
-    clienteContacto: { type: String },
+    titulo: { type: String, default: "Orçamento" },
+    clienteNome: { type: String, default: "" },
+    clienteContacto: { type: String, default: "" },
+    notas: { type: String, default: "" },
 
-    linhas: { type: [LinhaOrcamentoSchema], default: [] },
+    // ✅ IMPORTANTE: este campo tem de existir no schema
+    descontoPercent: { type: Number, default: 0 },
+
+    estado: { type: String, default: "rascunho" },
+
+    linhas: { type: [LinhaSchema], default: [] },
 
     subtotal: { type: Number, default: 0 },
     totalIva: { type: Number, default: 0 },
+
+    // ✅ total FINAL (já com desconto aplicado)
     total: { type: Number, default: 0 },
 
-    estado: {
-      type: String,
-      enum: ['rascunho', 'enviado', 'aceite', 'rejeitado'],
-      default: 'rascunho',
-    },
-
-    notas: { type: String },
-
-    criadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    criadoPor: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
-export default mongoose.models.Orcamento ||
-  mongoose.model('Orcamento', OrcamentoSchema);
+export default mongoose.models.Orcamento || mongoose.model("Orcamento", OrcamentoSchema);

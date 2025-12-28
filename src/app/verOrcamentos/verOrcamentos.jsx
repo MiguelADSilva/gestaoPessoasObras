@@ -1,14 +1,14 @@
 'use client';
 import React from 'react';
 
-export default function VerOrcamentos({ onBack }) {
+export default function VerOrcamentos({ onBack, onEdit }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [q, setQ] = React.useState('');
   const [selected, setSelected] = React.useState(null);
 
-  // ✅ NOVO: email
+  // ✅ Email
   const [emailTo, setEmailTo] = React.useState('');
   const [sendingEmail, setSendingEmail] = React.useState(false);
   const [emailMsg, setEmailMsg] = React.useState('');
@@ -68,6 +68,44 @@ export default function VerOrcamentos({ onBack }) {
     return dt.toLocaleString('pt-PT');
   };
 
+  // ✅ cálculo de desconto (compatível com vários nomes de campos)
+  const calcTotals = (orc) => {
+    const subtotal = Number(orc?.subtotal ?? orc?.totals?.subtotal ?? 0) || 0;
+    const iva = Number(orc?.totalIva ?? orc?.totals?.iva ?? 0) || 0;
+
+    // aceita descontoPercent, descontoPct, desconto, descontoValor...
+    const pct = Number(
+      orc?.descontoPercent ??
+        orc?.descontoPct ??
+        orc?.descontoPerc ??
+        orc?.discountPercent ??
+        0
+    ) || 0;
+
+    const val = Number(
+      orc?.descontoValor ??
+        orc?.descontoValue ??
+        orc?.discountValue ??
+        0
+    ) || 0;
+
+    const totalSemDesconto = subtotal + iva;
+
+    // se existir valor, usa-o; senão usa percentagem
+    const desconto = val > 0 ? val : (totalSemDesconto * pct) / 100;
+
+    const totalComDesconto = Math.max(0, totalSemDesconto - desconto);
+
+    return {
+      subtotal,
+      iva,
+      totalSemDesconto,
+      desconto,
+      totalComDesconto,
+      pct,
+    };
+  };
+
   const deleteOrcamento = async (orc) => {
     const id = getId(orc);
     if (!id) return;
@@ -87,7 +125,7 @@ export default function VerOrcamentos({ onBack }) {
     }
   };
 
-  // ✅ NOVO: quando selecionas orçamento, pré-preenche email com contacto do cliente (se existir)
+  // ✅ ao selecionar orçamento, pré-preenche email
   React.useEffect(() => {
     if (!selected) {
       setEmailTo('');
@@ -98,7 +136,7 @@ export default function VerOrcamentos({ onBack }) {
     setEmailMsg('');
   }, [selected]);
 
-  // ✅ NOVO: enviar por email
+  // ✅ enviar por email
   const sendEmail = async () => {
     const id = getId(selected);
     if (!id) return;
@@ -132,15 +170,29 @@ export default function VerOrcamentos({ onBack }) {
     }
   };
 
+  // ✅ editar (2 opções)
+  // 1) se passares onEdit(orcamento) -> navega para a página de criar/editar com os dados
+  // 2) fallback: vai para /orcamentos/editar/[id]? (muda se precisares)
+const handleEdit = () => {
+  if (!selected) return;
+
+  // ✅ tens de passar onEdit do componente pai
+  if (typeof onEdit === 'function') {
+    onEdit(selected);
+    return;
+  }
+
+  // se não houver onEdit, não tenta navegar (porque no teu projeto não navega por URL)
+  console.warn('onEdit não foi passado pelo componente pai.');
+};
+
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Ver Orçamentos</h3>
-          <p className="text-sm text-gray-600">
-            Consultar e gerir orçamentos guardados.
-          </p>
+          <p className="text-sm text-gray-600">Consultar e gerir orçamentos guardados.</p>
         </div>
 
         <div className="flex items-center gap-2 sm:justify-end">
@@ -174,8 +226,7 @@ export default function VerOrcamentos({ onBack }) {
 
         <div className="flex items-end">
           <div className="w-full rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-sm text-purple-900">
-            <span className="font-medium">Total:</span>{' '}
-            {loading ? '…' : filtered.length}
+            <span className="font-medium">Total:</span> {loading ? '…' : filtered.length}
           </div>
         </div>
       </div>
@@ -194,18 +245,16 @@ export default function VerOrcamentos({ onBack }) {
         <div className="lg:col-span-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {loading ? (
-              <div className="col-span-full text-gray-500 text-sm py-6">
-                A carregar orçamentos...
-              </div>
+              <div className="col-span-full text-gray-500 text-sm py-6">A carregar orçamentos...</div>
             ) : filtered.length === 0 ? (
-              <div className="col-span-full text-gray-500 text-sm py-6">
-                Sem orçamentos.
-              </div>
+              <div className="col-span-full text-gray-500 text-sm py-6">Sem orçamentos.</div>
             ) : (
               filtered.map((o) => {
                 const id = getId(o);
                 const selectedId = getId(selected);
                 const isSelected = id && selectedId && id === selectedId;
+
+                const t = calcTotals(o);
 
                 return (
                   <div
@@ -234,8 +283,7 @@ export default function VerOrcamentos({ onBack }) {
                         </h5>
 
                         <div className="mt-2 text-sm text-gray-600">
-                          <span className="font-medium">Cliente:</span>{' '}
-                          {o?.clienteNome || '—'}
+                          <span className="font-medium">Cliente:</span> {o?.clienteNome || '—'}
                         </div>
 
                         <div className="mt-1 text-sm text-gray-600">
@@ -245,10 +293,13 @@ export default function VerOrcamentos({ onBack }) {
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="text-sm">
-                            <span className="text-gray-500">Total</span>
-                            <div className="font-semibold text-gray-900">
-                              {fmtMoney(o?.total || o?.totals?.total)}
-                            </div>
+                            <span className="text-gray-500">Total (c/ desconto)</span>
+                            <div className="font-semibold text-gray-900">{fmtMoney(t.totalComDesconto)}</div>
+                            {t.desconto > 0 ? (
+                              <div className="text-xs text-gray-500">
+                                Desconto: {fmtMoney(t.desconto)}{t.pct ? ` (${t.pct}%)` : ''}
+                              </div>
+                            ) : null}
                           </div>
 
                           <span className="text-purple-700">
@@ -257,7 +308,7 @@ export default function VerOrcamentos({ onBack }) {
                         </div>
                       </div>
 
-                      {/* Delete (não dispara o click do card) */}
+                      {/* Delete */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -286,15 +337,26 @@ export default function VerOrcamentos({ onBack }) {
           <div className="rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold text-gray-900">Detalhes</h4>
-              {selected && (
-                <button
-                  onClick={() => setSelected(null)}
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                  title="Fechar"
-                >
-                  Fechar
-                </button>
-              )}
+
+              {selected ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleEdit}
+                    className="px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                  >
+                    <i className="fa-solid fa-pen-to-square mr-2"></i>
+                    Editar
+                  </button>
+
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="text-sm text-gray-600 hover:text-gray-900"
+                    title="Fechar"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {!selected ? (
@@ -302,108 +364,122 @@ export default function VerOrcamentos({ onBack }) {
                 Seleciona um orçamento para ver os detalhes.
               </div>
             ) : (
-              <div className="mt-4 space-y-4">
-                <div>
-                  <div className="text-xs text-gray-500">Título</div>
-                  <div className="font-medium text-gray-900">{selected?.titulo || '—'}</div>
-                </div>
+              (() => {
+                const t = calcTotals(selected);
+                return (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <div className="text-xs text-gray-500">Título</div>
+                      <div className="font-medium text-gray-900">{selected?.titulo || '—'}</div>
+                    </div>
 
-                <div>
-                  <div className="text-xs text-gray-500">Cliente</div>
-                  <div className="text-sm text-gray-900">
-                    {selected?.clienteNome || '—'}{' '}
-                    {selected?.clienteContacto ? (
-                      <span className="text-gray-500">({selected.clienteContacto})</span>
-                    ) : null}
-                  </div>
-                </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Cliente</div>
+                      <div className="text-sm text-gray-900">
+                        {selected?.clienteNome || '—'}{' '}
+                        {selected?.clienteContacto ? (
+                          <span className="text-gray-500">({selected.clienteContacto})</span>
+                        ) : null}
+                      </div>
+                    </div>
 
-                <div>
-                  <div className="text-xs text-gray-500">Obra</div>
-                  <div className="text-sm text-gray-900">
-                    {selected?.obraNomeSnapshot || (selected?.obraId ? String(selected.obraId) : 'Sem obra')}
-                  </div>
-                </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Obra</div>
+                      <div className="text-sm text-gray-900">
+                        {selected?.obraNomeSnapshot ||
+                          (selected?.obraId ? String(selected.obraId) : 'Sem obra')}
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <MiniStat label="Subtotal" value={fmtMoney(selected?.subtotal || selected?.totals?.subtotal)} />
-                  <MiniStat label="IVA" value={fmtMoney(selected?.totalIva || selected?.totals?.iva)} />
-                  <MiniStat label="Total" value={fmtMoney(selected?.total || selected?.totals?.total)} />
-                  <MiniStat label="Linhas" value={String((selected?.linhas || []).length)} />
-                </div>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <MiniStat label="Subtotal" value={fmtMoney(t.subtotal)} />
+                      <MiniStat label="IVA" value={fmtMoney(t.iva)} />
+                      <MiniStat label="Total s/ desconto" value={fmtMoney(t.totalSemDesconto)} />
+                      <MiniStat label="Desconto" value={`${fmtMoney(t.desconto)}${t.pct ? ` (${t.pct}%)` : ''}`} />
+                      <MiniStat label="Total c/ desconto" value={fmtMoney(t.totalComDesconto)} />
+                      <MiniStat label="Linhas" value={String((selected?.linhas || []).length)} />
+                    </div>
 
-                {/* ✅ NOVO: Enviar por Email */}
-                <div className="pt-2">
-                  <div className="text-xs text-gray-500 mb-2">Enviar por email</div>
+                    {/* Email */}
+                    <div className="pt-2">
+                      <div className="text-xs text-gray-500 mb-2">Enviar por email</div>
 
-                  <div className="flex flex-col gap-2">
-                    <input
-                      value={emailTo}
-                      onChange={(e) => setEmailTo(e.target.value)}
-                      placeholder="ex: cliente@email.com"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
-                    />
+                      <div className="flex flex-col gap-2">
+                        <input
+                          value={emailTo}
+                          onChange={(e) => setEmailTo(e.target.value)}
+                          placeholder="ex: cliente@email.com"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                        />
 
-                    <button
-                      type="button"
-                      onClick={sendEmail}
-                      disabled={sendingEmail}
-                      className={`w-full px-4 py-2 rounded-md text-white ${
-                        sendingEmail ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
-                      }`}
-                    >
-                      {sendingEmail ? 'A enviar...' : 'Enviar Orçamento'}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={sendEmail}
+                          disabled={sendingEmail}
+                          className={`w-full px-4 py-2 rounded-md text-white ${
+                            sendingEmail ? 'bg-purple-400' : 'bg-purple-600 hover:bg-purple-700'
+                          }`}
+                        >
+                          {sendingEmail ? 'A enviar...' : 'Enviar Orçamento'}
+                        </button>
 
-                    {emailMsg ? (
-                      <div className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-md p-2">
-                        {emailMsg}
+                        {emailMsg ? (
+                          <div className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-md p-2">
+                            {emailMsg}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Linhas */}
+                    <div className="pt-2">
+                      <div className="text-xs text-gray-500 mb-2">Linhas</div>
+
+                      <div className="max-h-[45vh] overflow-auto rounded-lg border border-gray-200">
+                        {(selected?.linhas || []).length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-gray-600">Sem linhas.</div>
+                        ) : (
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  Descrição
+                                </th>
+                                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                                  Qtd
+                                </th>
+                                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                                  Preço
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {(selected?.linhas || []).map((l, idx) => (
+                                <tr key={idx}>
+                                  <td className="px-3 py-2 text-sm text-gray-900">{l?.descricao || '—'}</td>
+                                  <td className="px-3 py-2 text-sm text-gray-700 text-right">
+                                    {Number(l?.quantidade ?? 0)}
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-700 text-right">
+                                    {fmtMoney(l?.precoUnitario ?? l?.precoUnit ?? 0)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+
+                    {selected?.notas ? (
+                      <div className="pt-2">
+                        <div className="text-xs text-gray-500">Notas</div>
+                        <div className="text-sm text-gray-900 whitespace-pre-wrap">{selected.notas}</div>
                       </div>
                     ) : null}
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <div className="text-xs text-gray-500 mb-2">Linhas</div>
-                  <div className="max-h-[45vh] overflow-auto rounded-lg border border-gray-200">
-                    {(selected?.linhas || []).length === 0 ? (
-                      <div className="px-3 py-3 text-sm text-gray-600">Sem linhas.</div>
-                    ) : (
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50 sticky top-0">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
-                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
-                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Preço</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {(selected?.linhas || []).map((l, idx) => (
-                            <tr key={idx}>
-                              <td className="px-3 py-2 text-sm text-gray-900">
-                                {l?.descricao || '—'}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-700 text-right">
-                                {Number(l?.quantidade ?? 0)}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-700 text-right">
-                                {fmtMoney(l?.precoUnitario ?? l?.precoUnit ?? 0)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-
-                {selected?.notas ? (
-                  <div className="pt-2">
-                    <div className="text-xs text-gray-500">Notas</div>
-                    <div className="text-sm text-gray-900 whitespace-pre-wrap">{selected.notas}</div>
-                  </div>
-                ) : null}
-              </div>
+                );
+              })()
             )}
           </div>
         </div>

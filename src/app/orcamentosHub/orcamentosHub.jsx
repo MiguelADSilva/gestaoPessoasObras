@@ -1,13 +1,20 @@
 'use client';
 import React from 'react';
-import OrcamentoBuilder from '../orcamentoBuilder/orcamentoBuilder'; // ajusta se necessário
+import OrcamentoBuilder from '../orcamentoBuilder/orcamentoBuilder'; // ✅ o teu caminho
+import VerOrcamentos from '../verOrcamentos/VerOrcamentos'; // ⚠️ AJUSTA este caminho!
 
 export default function OrcamentosHub({ onBack }) {
-  const [view, setView] = React.useState('list'); // 'list' | 'builder'
+  const [view, setView] = React.useState('listObras'); 
+  // 'listObras' | 'verOrcamentos' | 'builder'
+
   const [obras, setObras] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [selectedObra, setSelectedObra] = React.useState(null);
+
+  // ✅ NOVO: para edição
+  const [editingOrcamento, setEditingOrcamento] = React.useState(null); // guarda objeto orçamento (ou null)
+  const [editingOrcamentoId, setEditingOrcamentoId] = React.useState(null); // guarda id (ou null)
 
   const getToken = () => {
     try {
@@ -65,18 +72,39 @@ export default function OrcamentosHub({ onBack }) {
   }, []);
 
   React.useEffect(() => {
-    if (view === 'list') fetchObras();
+    if (view === 'listObras') fetchObras();
   }, [fetchObras, view]);
 
-  // ✅ ABRIR BUILDER SEM OBRA
+  // ✅ abrir builder novo
   const openOrcamentoSemObra = () => {
     setSelectedObra(null);
+    setEditingOrcamento(null);
+    setEditingOrcamentoId(null);
     setView('builder');
   };
 
-  // ✅ ABRIR BUILDER COM OBRA
   const openOrcamentoComObra = (obra) => {
     setSelectedObra(obra);
+    setEditingOrcamento(null);
+    setEditingOrcamentoId(null);
+    setView('builder');
+  };
+
+  // ✅ ABRIR LISTA DE ORÇAMENTOS
+  const openVerOrcamentos = () => {
+    setView('verOrcamentos');
+  };
+
+  // ✅ handler do "Editar" vindo do VerOrcamentos
+  const handleEditOrcamento = (orc) => {
+    const id = orc?._id || orc?.id || null;
+
+    // opcional: se quiseres manter a obra associada, tenta usar obraId
+    // mas como tens "obra pode ser null", não precisamos obrigatoriamente.
+    // aqui deixo selectedObra como está.
+    setEditingOrcamento(orc || null);
+    setEditingOrcamentoId(id);
+
     setView('builder');
   };
 
@@ -106,6 +134,18 @@ export default function OrcamentosHub({ onBack }) {
   };
 
   // ==========================
+  // VIEW: VER ORÇAMENTOS
+  // ==========================
+  if (view === 'verOrcamentos') {
+    return (
+      <VerOrcamentos
+        onBack={() => setView('listObras')}
+        onEdit={handleEditOrcamento} // ✅ AGORA PASSA onEdit
+      />
+    );
+  }
+
+  // ==========================
   // VIEW: BUILDER
   // ==========================
   if (view === 'builder') {
@@ -114,31 +154,27 @@ export default function OrcamentosHub({ onBack }) {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 truncate">
-              {selectedObra ? `Orçamento para: ${selectedObra?.nome || 'Obra'}` : 'Orçamento (obra não guardada)'}
+              {editingOrcamentoId
+                ? `Editar Orçamento (#${String(editingOrcamentoId).slice(-6)})`
+                : selectedObra
+                ? `Orçamento para: ${selectedObra?.nome || 'Obra'}`
+                : 'Orçamento (obra não guardada)'}
             </h3>
             <p className="text-sm text-gray-600">
-              {selectedObra
-                ? 'Builder associado à obra selecionada.'
-                : 'Builder de orçamento avulso (sem obra).'}
+              {editingOrcamentoId
+                ? 'A editar um orçamento existente.'
+                : selectedObra
+                ? 'Novo orçamento associado à obra selecionada.'
+                : 'Novo orçamento avulso (sem obra).'}
             </p>
-
-            <div className="mt-2">
-              {selectedObra ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-blue-50 text-blue-800">
-                  <i className="fa-solid fa-briefcase"></i>
-                  Orçamento para: <b className="font-semibold">{selectedObra?.nome || 'Obra'}</b>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
-                  <i className="fa-solid fa-file-circle-plus"></i>
-                  Orçamento para obra não guardada
-                </span>
-              )}
-            </div>
           </div>
 
           <button
-            onClick={() => setView('list')}
+            onClick={() => {
+              // se estava a editar, volta para ver orçamentos; senão volta para lista de obras
+              if (editingOrcamentoId) setView('verOrcamentos');
+              else setView('listObras');
+            }}
             className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Voltar
@@ -146,8 +182,15 @@ export default function OrcamentosHub({ onBack }) {
         </div>
 
         <div className="mt-6">
-          {/* ✅ PASSA A OBRA (ou null) para o teu builder */}
-          <OrcamentoBuilder obra={selectedObra} />
+          <OrcamentoBuilder
+            obra={selectedObra}
+            onBack={() => {
+              if (editingOrcamentoId) setView('verOrcamentos');
+              else setView('listObras');
+            }}
+            orcamentoId={editingOrcamentoId}          // ✅ se quiseres carregar por API
+            initialOrcamento={editingOrcamento}       // ✅ hidrata logo sem fetch (opcional)
+          />
         </div>
       </div>
     );
@@ -165,13 +208,20 @@ export default function OrcamentosHub({ onBack }) {
           <p className="text-sm text-gray-600">Escolhe uma obra (ou cria um orçamento sem obra).</p>
         </div>
 
-        {/* Botões à direita */}
         <div className="flex items-center gap-2 sm:justify-end">
           <button
             onClick={onBack}
             className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Voltar
+          </button>
+
+          <button
+            onClick={openVerOrcamentos}
+            className="px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700"
+            title="Ver orçamentos guardados"
+          >
+            Ver Orçamentos
           </button>
 
           <button
@@ -207,7 +257,6 @@ export default function OrcamentosHub({ onBack }) {
           </button>
         </div>
 
-        {/* Grid de cards */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {loading ? (
             <div className="col-span-full text-gray-500 text-sm py-6">A carregar obras...</div>
@@ -218,7 +267,7 @@ export default function OrcamentosHub({ onBack }) {
               <ObraCard
                 key={o._id}
                 obra={o}
-                onClick={() => openOrcamentoComObra(o)}   // ✅ AGORA ABRE O BUILDER
+                onClick={() => openOrcamentoComObra(o)}
                 onDelete={() => deleteObra(o)}
               />
             ))
@@ -252,7 +301,6 @@ function ObraCard({ obra, onClick, onDelete }) {
         'transition-transform duration-200 ease-out',
         'hover:-translate-y-1 hover:shadow-xl hover:scale-[1.01]',
         'ring-1 ring-transparent hover:ring-2 hover:ring-blue-200',
-        // 🔵 EFEITO AZUL
         'before:content-[""] before:absolute before:inset-0',
         'before:bg-gradient-to-r before:from-blue-200/30 before:to-transparent',
         'before:opacity-0 hover:before:opacity-100',
@@ -290,13 +338,12 @@ function ObraCard({ obra, onClick, onDelete }) {
           </div>
         </div>
 
-        {/* AÇÕES */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={(e) => {
               e.preventDefault();
-              e.stopPropagation(); // 🔥 não ativa o card
+              e.stopPropagation();
               onDelete?.();
             }}
             className="p-2 rounded-full bg-red-100 text-red-700 hover:bg-red-200"

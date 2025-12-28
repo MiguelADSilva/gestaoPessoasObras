@@ -2,9 +2,25 @@
 import React from 'react';
 import OrcamentosHub from '../orcamentosHub/orcamentosHub';
 import VerOrcamentos from '../verOrcamentos/verOrcamentos';
+import OrcamentoBuilder from '../orcamentoBuilder/orcamentoBuilder'; // ✅ ajuste conforme a tua pasta
 
 export default function AnotacoesHub() {
-  const [view, setView] = React.useState('menu'); // 'menu' | 'materiais' | 'orcamentos' | 'ver_orcamentos'
+  // 'menu' | 'materiais' | 'orcamentos' | 'ver_orcamentos' | 'editar_orcamento'
+  const [view, setView] = React.useState('menu');
+
+  // ✅ guarda o orçamento selecionado para edição
+  const [editingOrcamento, setEditingOrcamento] = React.useState(null);
+
+  const handleEditOrcamento = (orc) => {
+    if (!orc) return;
+    setEditingOrcamento(orc);
+    setView('editar_orcamento');
+  };
+
+  const goMenu = () => {
+    setEditingOrcamento(null);
+    setView('menu');
+  };
 
   return (
     <div className="space-y-6">
@@ -38,15 +54,61 @@ export default function AnotacoesHub() {
       )}
 
       {/* VIEWS */}
-      {view === 'materiais' && <MaterialsManager onBack={() => setView('menu')} />}
+      {view === 'materiais' && <MaterialsManager onBack={goMenu} />}
 
-      {view === 'orcamentos' && <OrcamentosHub onBack={() => setView('menu')} />}
+      {view === 'orcamentos' && <OrcamentosHub onBack={goMenu} />}
 
-      {view === 'ver_orcamentos' && <VerOrcamentos onBack={() => setView('menu')} />}
+      {view === 'ver_orcamentos' && (
+        <VerOrcamentos
+          onBack={goMenu}
+          onEdit={handleEditOrcamento} // ✅ PASSA onEdit para o filho
+        />
+      )}
+
+      {/* ✅ ECRÃ DE EDIÇÃO (sem mudar URL) */}
+      {view === 'editar_orcamento' && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 truncate">Editar Orçamento</h3>
+              <p className="text-sm text-gray-600">
+                {editingOrcamento?._id
+                  ? `A editar (#${String(editingOrcamento._id).slice(-6)})`
+                  : 'A editar orçamento'}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setEditingOrcamento(null);
+                setView('ver_orcamentos');
+              }}
+              className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Voltar
+            </button>
+          </div>
+
+          <div className="mt-6">
+            <OrcamentoBuilder
+              obra={null} // ou passa a obra se quiseres
+              onBack={() => {
+                setEditingOrcamento(null);
+                setView('ver_orcamentos');
+              }}
+              initialOrcamento={editingOrcamento} // ✅ carrega tudo no builder
+              orcamentoId={editingOrcamento?._id || editingOrcamento?.id || null} // ✅ opcional
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+/* =========================
+   CARD MENU
+========================= */
 function ActionCard({ title, subtitle, iconClass, accent = 'orange', onClick }) {
   const accentMap = {
     orange: {
@@ -104,6 +166,7 @@ function ActionCard({ title, subtitle, iconClass, accent = 'orange', onClick }) 
 
 /* =========================
    VIEW: MATERIAIS
+   (CÓDIGO ORIGINAL DO UTILIZADOR)
 ========================= */
 function MaterialsManager({ onBack }) {
   const [items, setItems] = React.useState([]);

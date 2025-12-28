@@ -19,38 +19,14 @@ function escapeHtml(str = "") {
 }
 
 function getBaseUrl(req) {
-  // ✅ Netlify define URL automaticamente
   const envUrl = process.env.URL || process.env.DEPLOY_PRIME_URL;
   if (envUrl) return envUrl;
 
-  // fallback: usar host do pedido
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto") || "https";
   if (host) return `${proto}://${host}`;
 
-  // último fallback
   return "http://localhost:3000";
-}
-
-// tenta ler "desconto" (valor €) e "descontoPercent" (%) do orçamento
-function getDiscount(orc, subtotalNum, totalNum) {
-  const dVal =
-    Number(orc?.desconto ?? orc?.discount ?? orc?.totals?.desconto ?? orc?.totals?.discount);
-
-  const dPct =
-    Number(orc?.descontoPercent ?? orc?.discountPercent ?? orc?.totals?.descontoPercent);
-
-  if (Number.isFinite(dVal) && dVal > 0) {
-    return { type: "value", value: dVal };
-  }
-
-  if (Number.isFinite(dPct) && dPct > 0) {
-    // percent aplica-se ao subtotal por defeito
-    const calc = (Number.isFinite(subtotalNum) ? subtotalNum : totalNum) * (dPct / 100);
-    return { type: "percent", percent: dPct, value: calc };
-  }
-
-  return { type: "none", value: 0 };
 }
 
 export async function POST(req, { params }) {
@@ -62,85 +38,69 @@ export async function POST(req, { params }) {
     if (!id) return NextResponse.json({ error: "ID inválido." }, { status: 400 });
     if (!to) return NextResponse.json({ error: "Email de destino em falta." }, { status: 400 });
 
-    // ✅ 1) Buscar orçamento (com baseUrl certo no Netlify)
     const baseUrl = getBaseUrl(req);
-
     const getRes = await fetch(`${baseUrl}/api/orcamentos/${id}`, { cache: "no-store" });
     const orc = await getRes.json().catch(() => null);
 
     if (!getRes.ok || !orc) {
-      return NextResponse.json(
-        { error: "Orçamento não encontrado.", debug: { status: getRes.status, baseUrl } },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Orçamento não encontrado." }, { status: 404 });
     }
 
     const titulo = orc?.titulo || "Orçamento";
     const cliente = orc?.clienteNome || "—";
-    const obra = orc?.obraNomeSnapshot || (orc?.obraId ? String(orc.obraId) : "—");
+    const obra = orc?.obraNomeSnapshot || "—";
 
-    const subtotalNum = Number(orc?.subtotal ?? orc?.totals?.subtotal ?? 0);
-    const ivaNum = Number(orc?.totalIva ?? orc?.totals?.iva ?? 0);
-    const totalNum = Number(orc?.total ?? orc?.totals?.total ?? 0);
-
-    // ✅ desconto (valor ou %)
-    const discountInfo = getDiscount(orc, subtotalNum, totalNum);
-
-    // se o teu total já vem com desconto aplicado, isto só mostra.
-    // se o teu total NÃO vem com desconto aplicado, calcula aqui um total estimado.
-    // Por defeito, assumo que o total já está certo e só exibimos o desconto.
-    const descontoNum = Number(discountInfo?.value ?? 0);
+    const subtotalNum = Number(orc?.subtotal ?? 0);
+    const descontoNum = Number(orc?.desconto ?? 0);
+    const ivaNum = Number(orc?.totalIva ?? 0);
+    const totalNum = Number(orc?.total ?? 0);
 
     const subtotal = money(subtotalNum);
-    const desconto = descontoNum > 0 ? money(descontoNum) : "—";
+    const desconto = money(descontoNum);
     const iva = money(ivaNum);
     const total = money(totalNum);
 
-    // ✅ Pagamentos (base TOTAL)
     const p50 = money(totalNum * 0.5);
     const p30 = money(totalNum * 0.3);
     const p20 = money(totalNum * 0.2);
 
     const linhas = Array.isArray(orc?.linhas) ? orc.linhas : [];
 
-    // ✅ só lista materiais (sem qtd nem preço unitário)
-    const linhasHtml = linhas.length
+    const materiaisHtml = linhas.length
       ? `
-        <div style="margin-top:12px;font-weight:700">Materiais</div>
-        <ul style="margin:8px 0 0 18px;padding:0;color:#111">
-          ${linhas
-            .map((l) => {
-              const desc = escapeHtml(l?.descricao || "—");
-              return `<li style="margin:6px 0">${desc}</li>`;
-            })
-            .join("")}
-        </ul>
+        <table style="width:100%;border-collapse:collapse;margin-top:14px">
+          <thead>
+            <tr>
+              <th style="text-align:left;border-bottom:1px solid #ddd;padding:8px">
+                Materiais incluídos
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhas
+              .map((l) => {
+                const desc = escapeHtml(l?.descricao || "—");
+                return `
+                  <tr>
+                    <td style="border-bottom:1px solid #f0f0f0;padding:8px">
+                      ${desc}
+                    </td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
       `
-      : `<div style="margin-top:12px;color:#666">Sem materiais.</div>`;
-
-    const descontoLinhaHtml =
-      descontoNum > 0
-        ? `
-          <div style="margin-top:10px">
-            <strong>Desconto:</strong> -${desconto}${
-              discountInfo?.type === "percent" && Number.isFinite(discountInfo?.percent)
-                ? ` <span style="color:#666;font-size:12px">(${discountInfo.percent.toFixed(
-                    2
-                  )}%)</span>`
-                : ""
-            }
-          </div>
-        `
-        : "";
+      : `<div style="margin-top:12px;color:#666">Sem materiais listados.</div>`;
 
     const nowPt = new Date().toLocaleString("pt-PT");
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:16px">
 
-        <!-- IMPORTANTE -->
         <div style="background:#fff3cd;border:1px solid #ffeeba;border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:26px;font-weight:800;color:#7a5a00;letter-spacing:0.5px">
+          <div style="font-size:26px;font-weight:800;color:#7a5a00">
             IMPORTANTE
           </div>
           <div style="margin-top:8px;color:#6b5e2e;font-size:14px">
@@ -148,8 +108,7 @@ export async function POST(req, { params }) {
           </div>
         </div>
 
-        <h2 style="margin:0 0 8px 0">${escapeHtml(titulo)}</h2>
-        <div style="color:#666;margin-bottom:14px">Orçamento enviado através da plataforma.</div>
+        <h2>${escapeHtml(titulo)}</h2>
 
         <div style="border:1px solid #eee;border-radius:10px;padding:12px">
           <div><strong>Cliente:</strong> ${escapeHtml(cliente)}</div>
@@ -157,35 +116,20 @@ export async function POST(req, { params }) {
 
           <div style="margin-top:10px">
             <strong>Subtotal:</strong> ${subtotal}<br/>
-            ${descontoLinhaHtml}
+            <strong>Desconto:</strong> ${desconto}<br/>
             <strong>IVA:</strong> ${iva}<br/>
-            <strong>Total:</strong> ${total}
+            <strong>Total final:</strong> ${total}
           </div>
         </div>
 
-        <!-- Pagamento -->
         <div style="margin-top:14px;border:1px solid #e8e8e8;border-radius:10px;padding:12px">
-          <div style="font-weight:700;margin-bottom:6px">Informações de pagamento</div>
-
-          <div style="margin-top:8px">
-            <div style="margin-bottom:8px">
-              <strong>50% de adjudicação:</strong> ${p50}
-            </div>
-
-            <div style="margin-bottom:8px">
-              <strong>30% quando o serviço vai a meio:</strong> ${p30}<br/>
-              <span style="color:#666;font-size:13px">
-                (quando é uma obra, este valor só é pago quando estiver tudo — caixas e quadros — ao sítio)
-              </span>
-            </div>
-
-            <div style="margin-bottom:0px">
-              <strong>20% quando a obra estiver terminada:</strong> ${p20}
-            </div>
-          </div>
+          <div style="font-weight:700;margin-bottom:6px">Condições de pagamento</div>
+          <div><strong>50% adjudicação:</strong> ${p50}</div>
+          <div><strong>30% a meio da obra:</strong> ${p30}</div>
+          <div><strong>20% no final:</strong> ${p20}</div>
         </div>
 
-        ${linhasHtml}
+        ${materiaisHtml}
 
         ${
           orc?.notas
@@ -202,18 +146,6 @@ export async function POST(req, { params }) {
       </div>
     `;
 
-    // ✅ 2) Validar env vars antes de tentar enviar
-    const missing = [];
-    if (!process.env.EMAIL_HOST) missing.push("EMAIL_HOST");
-    if (!process.env.EMAIL_PORT) missing.push("EMAIL_PORT");
-    if (!process.env.EMAIL_USER) missing.push("EMAIL_USER");
-    if (!process.env.EMAIL_PASS) missing.push("EMAIL_PASS");
-
-    if (missing.length) {
-      return NextResponse.json({ error: "Env vars de email em falta.", missing }, { status: 500 });
-    }
-
-    // ✅ 3) Transport Nodemailer + verify (dá erro claro)
     const transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
       port: Number(process.env.EMAIL_PORT || 587),
@@ -226,11 +158,8 @@ export async function POST(req, { params }) {
 
     await transporter.verify();
 
-    const fromName = process.env.EMAIL_FROM_NAME || "Orçamentos";
-    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-
     await transporter.sendMail({
-      from: `${fromName} <${fromEmail}>`,
+      from: `${process.env.EMAIL_FROM_NAME || "Orçamentos"} <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to,
       subject: `Orçamento: ${titulo}`,
       html,
@@ -239,15 +168,7 @@ export async function POST(req, { params }) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      {
-        error: e?.message || "Erro ao enviar email.",
-        debug: {
-          name: e?.name,
-          code: e?.code,
-          command: e?.command,
-          response: e?.response,
-        },
-      },
+      { error: e?.message || "Erro ao enviar email." },
       { status: 500 }
     );
   }

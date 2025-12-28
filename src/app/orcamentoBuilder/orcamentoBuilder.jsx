@@ -1,23 +1,24 @@
 'use client';
 import React from 'react';
 
-export default function OrcamentoBuilder({ obra = null, onBack }) {
-  const [orcId, setOrcId] = React.useState(null); // quando guardas, fica com id
+export default function OrcamentoBuilder({
+  obra = null,
+  onBack,
+  orcamentoId = null, // ✅ passa este id quando queres editar
+  initialOrcamento = null, // ✅ ou passa o objeto orçamento (opcional)
+}) {
+  const [orcId, setOrcId] = React.useState(
+    orcamentoId || initialOrcamento?._id || initialOrcamento?.id || null
+  );
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
 
-  // Cabeçalho / cliente
-  const [meta, setMeta] = React.useState({
-    titulo: obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)',
-    clienteNome: '',
-    clienteContacto: '',
-    notas: '',
-    descontoPercent: 0, // desconto global (%)
-  });
+  const makeRowId = () =>
+    (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
 
   function novaLinhaVazia() {
     return {
-      id: crypto.randomUUID?.() || String(Date.now() + Math.random()),
+      id: makeRowId(),
       materialId: null,
       descricao: '',
       unidade: 'un',
@@ -26,6 +27,15 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
       iva: 23,
     };
   }
+
+  // Cabeçalho / cliente
+  const [meta, setMeta] = React.useState({
+    titulo: obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)',
+    clienteNome: '',
+    clienteContacto: '',
+    notas: '',
+    descontoPercent: 0,
+  });
 
   // Linhas
   const [linhas, setLinhas] = React.useState([novaLinhaVazia()]);
@@ -36,6 +46,81 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
   const [matError, setMatError] = React.useState('');
   const [matQ, setMatQ] = React.useState('');
   const [materiais, setMateriais] = React.useState([]);
+
+  // ✅ Carregar orçamento para edição (via id ou initialOrcamento)
+  React.useEffect(() => {
+    let ignore = false;
+
+    const hydrate = (orc) => {
+      const tituloDefault = obra ? `Orçamento - ${obra?.nome || 'Obra'}` : 'Orçamento (sem obra)';
+
+      const descontoPercent = Number(
+        orc?.descontoPercent ??
+          orc?.descontoPct ??
+          orc?.descontoPerc ??
+          orc?.discountPercent ??
+          0
+      );
+
+      setMeta({
+        titulo: (orc?.titulo || tituloDefault),
+        clienteNome: (orc?.clienteNome || ''),
+        clienteContacto: (orc?.clienteContacto || ''),
+        notas: (orc?.notas || ''),
+        descontoPercent: Number.isFinite(descontoPercent) ? descontoPercent : 0,
+      });
+
+      const ls = Array.isArray(orc?.linhas) ? orc.linhas : [];
+      const linhasHidratadas = ls.length
+        ? ls.map((l) => ({
+            id: makeRowId(),
+            materialId: l?.materialId || null,
+            descricao: l?.descricao || '',
+            unidade: l?.unidade || 'un',
+            quantidade: Number(l?.quantidade ?? 0),
+            precoUnitario: Number(l?.precoUnitario ?? l?.precoUnit ?? 0),
+            iva: Number(l?.iva ?? 23),
+          }))
+        : [novaLinhaVazia()];
+
+      setLinhas(linhasHidratadas);
+    };
+
+    async function loadById(id) {
+      try {
+        setError('');
+        const res = await fetch(`/api/orcamentos/${id}`, { cache: 'no-store' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) throw new Error(data?.error || 'Erro ao carregar orçamento.');
+
+        if (ignore) return;
+        setOrcId(data?._id || data?.id || id);
+        hydrate(data);
+      } catch (e) {
+        if (ignore) return;
+        setError(e?.message || 'Erro ao carregar orçamento.');
+      }
+    }
+
+    // prioridade: initialOrcamento
+    if (initialOrcamento) {
+      hydrate(initialOrcamento);
+      const id = initialOrcamento?._id || initialOrcamento?.id || null;
+      if (id) setOrcId(id);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    // senão: orcamentoId
+    if (orcamentoId) {
+      loadById(orcamentoId);
+    }
+
+    return () => {
+      ignore = true;
+    };
+  }, [orcamentoId, initialOrcamento, obra]);
 
   const subtotal = React.useMemo(() => {
     return linhas.reduce(
@@ -108,103 +193,90 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
   };
 
   const guardarRascunho = async () => {
-  setSaving(true);
-  setError('');
+    setSaving(true);
+    setError('');
 
-  try {
-    // normaliza linhas e garante números SEM NaN
-    const linhasNormalizadas = linhas.map((l) => {
-      const quantidade = Number(l.quantidade);
-      const precoUnitario = Number(l.precoUnitario); // vem do estado
-      const ivaPercent = Number(l.iva);
+    try {
+      // ✅ normaliza linhas (sem NaN)
+      const linhasNormalizadas = linhas.map((l) => {
+        const q = Number(l.quantidade);
+        const pu = Number(l.precoUnitario);
+        const iv = Number(l.iva);
 
-      const q = Number.isFinite(quantidade) ? quantidade : 0;
-      const pu = Number.isFinite(precoUnitario) ? precoUnitario : 0;
-      const iva = Number.isFinite(ivaPercent) ? ivaPercent : 0;
+        const quantidade = Number.isFinite(q) ? q : 0;
+        const precoUnitario = Number.isFinite(pu) ? pu : 0;
+        const iva = Number.isFinite(iv) ? iv : 0;
 
-      const totalLinha = q * pu;
+        const totalLinha = quantidade * precoUnitario;
 
-      return {
-        materialId: l.materialId || null,
-        descricao: (l.descricao || '').trim(),
-        unidade: (l.unidade || 'un').trim(),
-        quantidade: q,
+        return {
+          materialId: l.materialId || null,
+          descricao: (l.descricao || '').trim(),
+          unidade: (l.unidade || 'un').trim(),
+          quantidade,
+          precoUnitario,
+          iva,
+          totalLinha: Number.isFinite(totalLinha) ? totalLinha : 0,
+        };
+      });
 
-        // ✅ NOME QUE O TEU SCHEMA PEDE
-        precoUnitario: pu,
+      const subtotalCalc = linhasNormalizadas.reduce(
+        (acc, l) => acc + Number(l.quantidade) * Number(l.precoUnitario),
+        0
+      );
 
-        iva: iva,
+      const totalIvaCalc = linhasNormalizadas.reduce((acc, l) => {
+        const base = Number(l.quantidade) * Number(l.precoUnitario);
+        return acc + base * ((Number(l.iva) || 0) / 100);
+      }, 0);
 
-        // ✅ alguns schemas também pedem isto
-        totalLinha: Number.isFinite(totalLinha) ? totalLinha : 0,
+      const descontoP = Number(meta.descontoPercent);
+      const descontoPercent = Number.isFinite(descontoP) ? descontoP : 0;
+
+      const totalAntesDesconto = subtotalCalc + totalIvaCalc;
+      const descontoValorCalc = totalAntesDesconto * (descontoPercent / 100);
+      const totalCalc = totalAntesDesconto - descontoValorCalc;
+
+      const payload = {
+        obraId: obra?._id || obra?.id || null,
+        obraNomeSnapshot: obra?.nome || undefined,
+
+        titulo: (meta.titulo || '').trim() || 'Orçamento',
+        clienteNome: (meta.clienteNome || '').trim(),
+        clienteContacto: (meta.clienteContacto || '').trim(),
+        notas: (meta.notas || '').trim(),
+
+        descontoPercent,
+        estado: 'rascunho',
+
+        linhas: linhasNormalizadas,
+
+        subtotal: Number.isFinite(subtotalCalc) ? subtotalCalc : 0,
+        totalIva: Number.isFinite(totalIvaCalc) ? totalIvaCalc : 0,
+        total: Number.isFinite(totalCalc) ? totalCalc : 0,
       };
-    });
 
-    // ✅ recalcula totals a partir das linhas já normalizadas
-    const subtotalCalc = linhasNormalizadas.reduce(
-      (acc, l) => acc + (Number(l.quantidade) * Number(l.precoUnitario)),
-      0
-    );
+      const isEdit = !!orcId;
+      const url = isEdit ? `/api/orcamentos/${orcId}` : `/api/orcamentos`;
+      const method = isEdit ? 'PUT' : 'POST';
 
-    const totalIvaCalc = linhasNormalizadas.reduce((acc, l) => {
-      const base = Number(l.quantidade) * Number(l.precoUnitario);
-      return acc + base * ((Number(l.iva) || 0) / 100);
-    }, 0);
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    const descontoPercent = Number(meta.descontoPercent);
-    const descontoP = Number.isFinite(descontoPercent) ? descontoPercent : 0;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Erro ao guardar orçamento.');
 
-    const totalAntesDesconto = subtotalCalc + totalIvaCalc;
-    const descontoValorCalc = totalAntesDesconto * (descontoP / 100);
-    const totalCalc = totalAntesDesconto - descontoValorCalc;
-
-    const payload = {
-      obraId: obra?._id || obra?.id || null,
-      titulo: (meta.titulo || '').trim() || 'Orçamento',
-      clienteNome: (meta.clienteNome || '').trim(),
-      clienteContacto: (meta.clienteContacto || '').trim(),
-      notas: (meta.notas || '').trim(),
-      descontoPercent: descontoP,
-      estado: 'rascunho',
-
-      // ✅ o teu schema quer "linhas"
-      linhas: linhas.map((l) => ({
-        materialId: l.materialId,
-        descricao: (l.descricao || '').trim(),
-        unidade: l.unidade || 'un',
-        quantidade: Number(l.quantidade || 0),
-        precoUnitario: Number(l.precoUnitario || l.precoUnitario || 0), // ✅ AQUI
-        iva: Number(l.iva ?? 23),
-        })),
-
-      // ✅ o teu schema quer estes campos NO ROOT (não dentro de totals)
-      subtotal: Number.isFinite(subtotalCalc) ? subtotalCalc : 0,
-      totalIva: Number.isFinite(totalIvaCalc) ? totalIvaCalc : 0,
-      total: Number.isFinite(totalCalc) ? totalCalc : 0,
-    };
-
-    const isEdit = !!orcId;
-    const url = isEdit ? `/api/orcamentos/${orcId}` : `/api/orcamentos`;
-    const method = isEdit ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || 'Erro ao guardar orçamento.');
-
-    const newId = data?._id || data?.id || orcId;
-    if (newId) setOrcId(newId);
-  } catch (e) {
-    setError(e?.message || 'Erro ao guardar orçamento.');
-  } finally {
-    setSaving(false);
-  }
-};
-
+      const newId = data?._id || data?.id || orcId;
+      if (newId) setOrcId(newId);
+    } catch (e) {
+      setError(e?.message || 'Erro ao guardar orçamento.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
@@ -215,7 +287,7 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
             {obra ? `Orçamento para: ${obra?.nome || 'Obra'}` : 'Orçamento sem obra'}
           </h3>
           <p className="text-sm text-gray-600">
-            {orcId ? `Rascunho guardado (#${String(orcId).slice(-6)})` : 'Ainda não guardado'}
+            {orcId ? `A editar (#${String(orcId).slice(-6)})` : 'Novo orçamento'}
           </p>
         </div>
 
@@ -248,7 +320,7 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
               saving ? 'bg-gray-400' : 'bg-gray-900 hover:bg-gray-800'
             }`}
           >
-            {saving ? 'A guardar…' : 'Guardar rascunho'}
+            {saving ? 'A guardar…' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -550,7 +622,7 @@ export default function OrcamentoBuilder({ obra = null, onBack }) {
   );
 }
 
-/* Helpers de tabela para alinhar sempre igual */
+/* Helpers */
 function Th({ children, w }) {
   return (
     <th className={`px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase ${w || ''}`}>
@@ -561,8 +633,6 @@ function Th({ children, w }) {
 function Td({ children }) {
   return <td className="px-3 py-3 align-middle">{children}</td>;
 }
-
-/* ✅ FALTAVA ISTO (era o teu erro: Field is not defined) */
 function Field({ label, children }) {
   return (
     <div>
