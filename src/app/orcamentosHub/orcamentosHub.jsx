@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import OrcamentoBuilder from '../orcamentoBuilder/orcamentoBuilder'; // ✅ o teu caminho
-import VerOrcamentos from '../verOrcamentos/VerOrcamentos'; // ⚠️ AJUSTA este caminho!
+import VerOrcamentos from '../verOrcamentos/verOrcamentos'; // ⚠️ AJUSTA este caminho!
 
 export default function OrcamentosHub({ onBack }) {
   const [view, setView] = React.useState('listObras'); 
