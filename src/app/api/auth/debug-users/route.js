@@ -1,13 +1,21 @@
-import { NextResponse } from 'next/server';
-import { connectToDatabase } from '../../lib/database';
+import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
 
 export async function GET() {
-  try {
-    const { db } = await connectToDatabase();
-    const users = await db.collection('users').find({}).toArray();
-    
-    return NextResponse.json({ users });
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // ✅ Bloqueia em produção
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  // ✅ Em DEV podes devolver informação de debug (mas NUNCA segredos)
+  return NextResponse.json({
+    ok: true,
+    env: {
+      // ⚠️ Não devolver valores de segredos. Só booleanos.
+      EMAIL_USER_SET: !!process.env.EMAIL_USER,
+      EMAIL_PASS_SET: !!process.env.EMAIL_PASS,
+      EMAIL_HOST_SET: !!process.env.EMAIL_HOST,
+    },
+  });
 }
