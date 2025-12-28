@@ -32,6 +32,27 @@ function getBaseUrl(req) {
   return "http://localhost:3000";
 }
 
+// tenta ler "desconto" (valor €) e "descontoPercent" (%) do orçamento
+function getDiscount(orc, subtotalNum, totalNum) {
+  const dVal =
+    Number(orc?.desconto ?? orc?.discount ?? orc?.totals?.desconto ?? orc?.totals?.discount);
+
+  const dPct =
+    Number(orc?.descontoPercent ?? orc?.discountPercent ?? orc?.totals?.descontoPercent);
+
+  if (Number.isFinite(dVal) && dVal > 0) {
+    return { type: "value", value: dVal };
+  }
+
+  if (Number.isFinite(dPct) && dPct > 0) {
+    // percent aplica-se ao subtotal por defeito
+    const calc = (Number.isFinite(subtotalNum) ? subtotalNum : totalNum) * (dPct / 100);
+    return { type: "percent", percent: dPct, value: calc };
+  }
+
+  return { type: "none", value: 0 };
+}
+
 export async function POST(req, { params }) {
   try {
     const id = params?.id;
@@ -62,7 +83,16 @@ export async function POST(req, { params }) {
     const ivaNum = Number(orc?.totalIva ?? orc?.totals?.iva ?? 0);
     const totalNum = Number(orc?.total ?? orc?.totals?.total ?? 0);
 
+    // ✅ desconto (valor ou %)
+    const discountInfo = getDiscount(orc, subtotalNum, totalNum);
+
+    // se o teu total já vem com desconto aplicado, isto só mostra.
+    // se o teu total NÃO vem com desconto aplicado, calcula aqui um total estimado.
+    // Por defeito, assumo que o total já está certo e só exibimos o desconto.
+    const descontoNum = Number(discountInfo?.value ?? 0);
+
     const subtotal = money(subtotalNum);
+    const desconto = descontoNum > 0 ? money(descontoNum) : "—";
     const iva = money(ivaNum);
     const total = money(totalNum);
 
@@ -73,36 +103,35 @@ export async function POST(req, { params }) {
 
     const linhas = Array.isArray(orc?.linhas) ? orc.linhas : [];
 
+    // ✅ só lista materiais (sem qtd nem preço unitário)
     const linhasHtml = linhas.length
       ? `
-        <table style="width:100%;border-collapse:collapse;margin-top:12px">
-          <thead>
-            <tr>
-              <th style="text-align:left;border-bottom:1px solid #ddd;padding:8px">Descrição</th>
-              <th style="text-align:right;border-bottom:1px solid #ddd;padding:8px">Qtd</th>
-              <th style="text-align:right;border-bottom:1px solid #ddd;padding:8px">Preço</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${linhas
-              .map((l) => {
-                const desc = escapeHtml(l?.descricao || "—");
-                const qtd = Number(l?.quantidade ?? 0);
-                const preco = money(l?.precoUnitario ?? l?.precoUnit ?? 0);
-
-                return `
-                  <tr>
-                    <td style="border-bottom:1px solid #f0f0f0;padding:8px">${desc}</td>
-                    <td style="border-bottom:1px solid #f0f0f0;padding:8px;text-align:right">${Number.isFinite(qtd) ? qtd : 0}</td>
-                    <td style="border-bottom:1px solid #f0f0f0;padding:8px;text-align:right">${preco}</td>
-                  </tr>
-                `;
-              })
-              .join("")}
-          </tbody>
-        </table>
+        <div style="margin-top:12px;font-weight:700">Materiais</div>
+        <ul style="margin:8px 0 0 18px;padding:0;color:#111">
+          ${linhas
+            .map((l) => {
+              const desc = escapeHtml(l?.descricao || "—");
+              return `<li style="margin:6px 0">${desc}</li>`;
+            })
+            .join("")}
+        </ul>
       `
-      : `<div style="margin-top:12px;color:#666">Sem linhas.</div>`;
+      : `<div style="margin-top:12px;color:#666">Sem materiais.</div>`;
+
+    const descontoLinhaHtml =
+      descontoNum > 0
+        ? `
+          <div style="margin-top:10px">
+            <strong>Desconto:</strong> -${desconto}${
+              discountInfo?.type === "percent" && Number.isFinite(discountInfo?.percent)
+                ? ` <span style="color:#666;font-size:12px">(${discountInfo.percent.toFixed(
+                    2
+                  )}%)</span>`
+                : ""
+            }
+          </div>
+        `
+        : "";
 
     const nowPt = new Date().toLocaleString("pt-PT");
 
@@ -128,6 +157,7 @@ export async function POST(req, { params }) {
 
           <div style="margin-top:10px">
             <strong>Subtotal:</strong> ${subtotal}<br/>
+            ${descontoLinhaHtml}
             <strong>IVA:</strong> ${iva}<br/>
             <strong>Total:</strong> ${total}
           </div>
@@ -180,10 +210,7 @@ export async function POST(req, { params }) {
     if (!process.env.EMAIL_PASS) missing.push("EMAIL_PASS");
 
     if (missing.length) {
-      return NextResponse.json(
-        { error: "Env vars de email em falta.", missing },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Env vars de email em falta.", missing }, { status: 500 });
     }
 
     // ✅ 3) Transport Nodemailer + verify (dá erro claro)
@@ -211,7 +238,6 @@ export async function POST(req, { params }) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    // ✅ devolve debug útil no 500
     return NextResponse.json(
       {
         error: e?.message || "Erro ao enviar email.",
